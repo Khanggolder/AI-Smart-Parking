@@ -1,13 +1,27 @@
 
-function Header({ title, auth }) {
-  const authText = auth.user
-    ? `${auth.user.username} (${auth.role})`
-    : "Chưa đăng nhập (demo)";
+import { LogOut } from "lucide-react";
 
+function Header({ title, auth, onLogout }) {
   return (
     <header className="header">
       <h1>{title}</h1>
-      <span>{authText}</span>
+
+      <div className="header-user">
+        <span>
+          {auth.user?.username || "Người dùng"}
+          {" · "}
+          {auth.role === "admin" ? "Admin" : "Operator"}
+        </span>
+
+        <button
+          type="button"
+          className="logout-button"
+          onClick={onLogout}
+        >
+          <LogOut size={16} />
+          Đăng xuất
+        </button>
+      </div>
     </header>
   );
 }

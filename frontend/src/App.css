@@ -120,3 +120,151 @@
   outline: 2px solid #93c5fd;
   outline-offset: 2px;
 }
+
+/* W2 - Authentication */
+
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: linear-gradient(135deg, #0f172a, #1e3a5f);
+}
+
+.login-card {
+  width: 100%;
+  max-width: 430px;
+  background: #ffffff;
+  padding: 38px;
+  border-radius: 16px;
+  box-shadow: 0 16px 48px #00000030;
+}
+
+.login-logo {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 60px;
+  height: 60px;
+  margin: 0 auto 20px;
+  border-radius: 15px;
+  background: #dbeafe;
+  color: #2563eb;
+}
+
+.login-card h1 {
+  text-align: center;
+  font-size: 28px;
+  color: #0f172a;
+}
+
+.login-subtitle {
+  text-align: center;
+  color: #64748b;
+  margin: 12px 0 30px;
+}
+
+.login-card form {
+  display: flex;
+  flex-direction: column;
+}
+
+.login-card label {
+  margin-bottom: 8px;
+  color: #334155;
+  font-weight: 600;
+}
+
+.login-card input {
+  width: 100%;
+  padding: 12px 14px;
+  margin-bottom: 20px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font: inherit;
+}
+
+.login-card input:focus {
+  outline: 2px solid #93c5fd;
+  border-color: #2563eb;
+}
+
+.login-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 13px;
+  border: none;
+  border-radius: 8px;
+  background: #2563eb;
+  color: white;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.login-button:hover {
+  background: #1d4ed8;
+}
+
+.login-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.login-error {
+  color: #b91c1c;
+  background: #fef2f2;
+  padding: 10px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.login-footer {
+  text-align: center;
+  margin-top: 24px;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.header-user {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.logout-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 9px 12px;
+  background: white;
+  color: #334155;
+  cursor: pointer;
+}
+
+.logout-button:hover {
+  background: #f1f5f9;
+}
+
+.session-loading {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  color: #334155;
+}
+
+@media (max-width: 600px) {
+  .login-card {
+    padding: 24px;
+  }
+
+  .header-user {
+    flex-direction: column;
+    align-items: flex-end;
+  }
+}

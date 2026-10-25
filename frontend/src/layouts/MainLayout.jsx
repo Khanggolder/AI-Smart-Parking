@@ -1,6 +1,5 @@
 
 import { Outlet, useLocation } from "react-router-dom";
-
 import Sidebar from "../components/Sidebar";
 import Header from "../components/Header";
 
@@ -13,16 +12,20 @@ const pageTitles = {
   "/reports": "Báo cáo",
 };
 
-function MainLayout({ auth }) {
+function MainLayout({ auth, onLogout }) {
   const { pathname } = useLocation();
   const title = pageTitles[pathname] ?? "AI Smart Parking";
 
   return (
     <div className="app-container">
-      <Sidebar />
+      <Sidebar role={auth.role} />
 
       <main className="main-content">
-        <Header title={title} auth={auth} />
+        <Header
+          title={title}
+          auth={auth}
+          onLogout={onLogout}
+        />
         <Outlet />
       </main>
     </div>
