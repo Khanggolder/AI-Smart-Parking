@@ -268,3 +268,139 @@
     align-items: flex-end;
   }
 }
+
+/* W2 - Parking Lots and Cameras */
+
+.manager-page {
+  display: grid;
+  gap: 20px;
+}
+
+.manager {
+  margin-top: 20px;
+}
+
+.manager-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.manager-hint {
+  color: #64748b;
+  font-size: 13px;
+  margin: 10px 0;
+}
+
+.manager-demo {
+  padding: 12px;
+  margin: 12px 0;
+  border-radius: 8px;
+  color: #854d0e;
+  background: #fef3c7;
+}
+
+.manager-primary {
+  padding: 10px 16px;
+  color: white;
+  background: #2563eb;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.manager-primary:disabled {
+  opacity: 0.6;
+}
+
+.manager-error {
+  padding: 12px;
+  color: #b91c1c;
+  background: #fef2f2;
+  border-radius: 8px;
+  margin: 12px 0;
+}
+
+.manager-success {
+  padding: 12px;
+  color: #166534;
+  background: #f0fdf4;
+  border-radius: 8px;
+  margin: 12px 0;
+}
+
+.manager-table-wrap {
+  overflow-x: auto;
+}
+
+.manager-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 16px;
+}
+
+.manager-table th,
+.manager-table td {
+  padding: 14px;
+  border-bottom: 1px solid #e2e8f0;
+  text-align: left;
+}
+
+.manager-table th {
+  background: #f8fafc;
+  color: #334155;
+}
+
+.manager-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.manager-actions button {
+  padding: 8px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: white;
+  cursor: pointer;
+}
+
+.manager-actions .manager-primary {
+  background: #2563eb;
+  color: white;
+}
+
+.manager-form {
+  margin-top: 24px;
+  padding: 20px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  display: grid;
+  gap: 14px;
+}
+
+.manager-form label {
+  display: grid;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.manager-form input,
+.manager-select {
+  width: 100%;
+  max-width: 520px;
+  padding: 10px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font: inherit;
+}
+
+@media (max-width: 600px) {
+  .manager-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+

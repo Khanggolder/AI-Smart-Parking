@@ -1,4 +1,10 @@
 
+
+import { useSearchParams } from "react-router-dom";
+
+import ParkingLots from "./pages/ParkingLots";
+import Cameras from "./pages/Cameras";
+
 import { useEffect, useState } from "react";
 import {
   BrowserRouter,
@@ -165,10 +171,17 @@ function App() {
           >
             <Route index element={<Dashboard />} />
 
+
             <Route
               path="/parking-lots"
-              element={<ComingSoon title="Quản lý bãi xe" />}
+              element={<ParkingLots role={auth.role} />}
             />
+
+            <Route
+              path="/cameras"
+              element={<Cameras role={auth.role} />}
+            />
+
 
             <Route
               path="/cameras"
@@ -193,6 +206,21 @@ function App() {
             />
           </Route>
         </Route>
+        
+        
+        {import.meta.env.DEV && (
+          <>
+            <Route
+              path="/dev/parking-lots"
+              element={<DevPreview page="parking-lots" />}
+            />
+
+            <Route
+              path="/dev/cameras"
+              element={<DevPreview page="cameras" />}
+            />
+          </>
+        )}
 
         <Route
           path="*"
@@ -202,5 +230,30 @@ function App() {
     </BrowserRouter>
   );
 }
+
+function DevPreview({ page }) {
+  const [params] = useSearchParams();
+  const role =
+    params.get("role") === "operator"
+      ? "operator"
+      : "admin";
+
+  return (
+    <main className="main-content">
+      <h1>UI Preview – {role.toUpperCase()}</h1>
+      <p className="manager-demo">
+        Chỉ dùng để kiểm tra giao diện khi phát triển.
+        Không có phiên đăng nhập thật.
+      </p>
+
+      {page === "parking-lots" ? (
+        <ParkingLots demo role={role} />
+      ) : (
+        <Cameras demo role={role} />
+      )}
+    </main>
+  );
+}
+
 
 export default App;
