@@ -1,6 +1,6 @@
 # Hợp đồng API inference W4
 
-Dịch vụ AI xử lý **một snapshot** từ camera cố định. Không có API lưu dữ liệu. Chưa thấy hợp đồng API backend riêng trong repository tại thời điểm W4; Nam cần đối chiếu các tên trường và mã lỗi trước khi tích hợp.
+Dịch vụ AI xử lý **một snapshot** từ camera cố định, không lưu dữ liệu. [Hợp đồng backend](../../docs/api/backend-api-contract-v1.md) hiện mô tả `/predict` và metadata khác với API `/v1/infer` này; [kế hoạch tích hợp](BACKEND_AI_INTEGRATION_PLAN.md) nêu mapping để Nam review trước khi có adapter.
 
 ## Endpoint
 

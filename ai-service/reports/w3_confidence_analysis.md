@@ -1,51 +1,43 @@
-# W3 — Validation confidence and UNKNOWN candidate
+# W3 – Phân tích confidence trên tập validation
 
-## Method
+## Cách đo
 
-The frozen W2 MobileNetV3-Small checkpoint at `ai-service/runs/mobilenetv3_gpu/best.pt` was evaluated on all 720 UFPR04 validation crops. The class order is `empty = 0`, `occupied = 1`. The training and validation manifests match the checksums stored in the checkpoint. The held-out test images were not loaded for inference or threshold selection. No training, model architecture change, or source-crop rewrite was performed.
+W3 dùng checkpoint MobileNetV3-Small đã chọn ở W2 để suy luận trên **720 crop validation** UFPR04. Train/validation manifest khớp SHA-256 ghi trong checkpoint; ảnh test độc lập không được dùng để chọn ngưỡng. Hai lớp theo thứ tự `empty=0`, `occupied=1`. Crop W1 dùng polygon mask; đầu vào RGB 224×224 và chuẩn hóa ImageNet. Model chạy CUDA, PyTorch 2.11.0+cu128, batch 16; checkpoint chọn ở epoch 2, SHA-256 `488ed38efe016ad9a6aea42973909b77372f7331b13da7cb9d4d81c23608dada`.
 
-Inference uses 224 × 224 RGB images with ImageNet mean `[0.485, 0.456, 0.406]` and standard deviation `[0.229, 0.224, 0.225]`. W1 crops use polygon masking. UNKNOWN is emitted when the maximum of the two softmax outputs is **strictly less than** the configured threshold. Softmax scores are not calibrated probabilities of correctness.
+Quy tắc: nếu `max(softmax) < threshold` thì nhãn cuối là `unknown`. Hai điểm softmax chưa được hiệu chuẩn thành xác suất dự đoán đúng. W3 không huấn luyện lại, đổi kiến trúc hoặc sửa crop.
 
-Run on CUDA with PyTorch 2.11.0+cu128, threshold 0.90, batch size 16. Checkpoint SHA-256: `488ed38efe016ad9a6aea42973909b77372f7331b13da7cb9d4d81c23608dada`. The checkpoint selected epoch 2.
+## Kết quả
 
-## Validation results
+Model phân loại đúng **720/720** crop validation: 348 empty và 372 occupied. Ở ngưỡng ứng viên **0,90**, có 714 kết quả được chấp nhận, 6 UNKNOWN (2 empty thật, 4 occupied thật); coverage 99,17%. Cả 714 kết quả được chấp nhận đều đúng **trên tập này**. Vì validation không có lỗi raw, không thể dùng tập này đo khả năng ngưỡng loại bỏ lỗi thông thường.
 
-Raw classification was correct on 720/720 crops: 348 empty and 372 occupied, with zero observed errors. At the 0.90 candidate threshold, 714 predictions were accepted and 6 were UNKNOWN (coverage 99.17%). Of the six abstentions, two were truly empty and four were truly occupied. Accepted accuracy was 714/714 on this validation split.
+Điểm softmax lớn nhất có min 0,5434, median 1,0000, phân vị 5% là 0,9992. Min của empty thật là 0,7351; occupied thật là 0,5434. ECE mô tả với 10 bin là 0,00264, chưa đủ chứng minh calibration.
 
-Maximum softmax score: minimum 0.5434, median 1.0000, fifth percentile 0.9992. The minimum was 0.7351 for true empty crops and 0.5434 for true occupied crops. Most scores are clustered near 1.0; the descriptive 10-bin ECE is 0.00264. That number is not proof of calibration, especially with no validation errors.
-
-| Threshold | Accepted | UNKNOWN | Coverage | UNKNOWN: empty / occupied | Accepted accuracy |
+| Ngưỡng | Chấp nhận | UNKNOWN | Coverage | UNKNOWN empty / occupied | Accuracy phần chấp nhận |
 |---:|---:|---:|---:|---:|---:|
-| 0.50 | 720 | 0 | 100.00% | 0 / 0 | 100% |
-| 0.70 | 719 | 1 | 99.86% | 0 / 1 | 100% |
-| 0.80 | 717 | 3 | 99.58% | 1 / 2 | 100% |
-| 0.90 | 714 | 6 | 99.17% | 2 / 4 | 100% |
-| 0.95 | 712 | 8 | 98.89% | 3 / 5 | 100% |
-| 0.98 | 704 | 16 | 97.78% | 7 / 9 | 100% |
-| 0.99 | 702 | 18 | 97.50% | 9 / 9 | 100% |
+| 0,50 | 720 | 0 | 100,00% | 0 / 0 | 100% |
+| 0,70 | 719 | 1 | 99,86% | 0 / 1 | 100% |
+| 0,80 | 717 | 3 | 99,58% | 1 / 2 | 100% |
+| 0,90 | 714 | 6 | 99,17% | 2 / 4 | 100% |
+| 0,95 | 712 | 8 | 98,89% | 3 / 5 | 100% |
+| 0,98 | 704 | 16 | 97,78% | 7 / 9 | 100% |
+| 0,99 | 702 | 18 | 97,50% | 9 / 9 | 100% |
 
-The full 2 × 3 confusion matrix for every threshold, counts, distribution bins, low-score sample paths, and per-class quantiles are in `ai-service/runs/mobilenetv3_gpu/confidence/val_confidence_report.json`. `val_predictions.csv` contains all 720 rows with true label, raw class, both softmax scores, maximum score, correctness, and final UNKNOWN decision. The same directory contains `val_confidence_distribution.png`, `lowest_confidence_crops.jpg` (24 lowest-score crops), and `threshold_candidate.json`.
+Chi tiết ma trận nhầm lẫn theo ngưỡng, phân bố điểm và từng crop nằm trong thư mục local `runs/mobilenetv3_gpu/confidence/`: `val_confidence_report.json`, `val_predictions.csv`, `val_confidence_distribution.png`, `lowest_confidence_crops.jpg`, `threshold_candidate.json`. Các artifact này không nằm trong Git.
 
-## Visual review of low-score crops
+## Ảnh khó và phép thử tổng hợp
 
-The lowest-score occupied crops show dark vehicles, and some vehicles are partly obscured by vegetation or fall near an edge of the narrow masked crop. Several low-score empty crops contain prominent foliage or very little visible parking surface. These are visible characteristics of this gallery, not a verified cause of the model's scores. No raw validation classification errors were available to inspect. The gallery does not establish performance for shadows, nighttime scenes, different cameras, or all occlusion patterns.
+Trong gallery điểm thấp có xe tối màu, xe bị cây che hoặc nằm sát mép crop; crop empty có lá cây hoặc ít mặt đường. Đây là quan sát hình ảnh, chưa xác định nguyên nhân của điểm số và chưa chứng minh hiệu năng ở camera khác.
 
-## Synthetic sensitivity check
+W3 biến đổi **trong bộ nhớ** 720 crop validation để xem độ nhạy; không sửa ảnh gốc:
 
-The same 720 validation crop files were transformed **in memory** using brightness 0.6, contrast 0.5, and a centered gray rectangle covering about 35% of image width and height. The separate `synthetic_sensitivity_report.json` records:
-
-| Synthetic change | Raw correct | UNKNOWN at 0.90 | Accepted correct / accepted |
+| Biến đổi tổng hợp | Raw đúng | UNKNOWN ở 0,90 | Đúng / được chấp nhận |
 |---|---:|---:|---:|
-| Brightness 0.6 | 719/720 | 8 | 712/712 |
-| Contrast 0.5 | 720/720 | 7 | 713/713 |
-| Center occlusion 35% | 709/720 | 21 | 696/699 |
+| Độ sáng ×0,6 | 719/720 | 8 | 712/712 |
+| Tương phản ×0,5 | 720/720 | 7 | 713/713 |
+| Che hình chữ nhật giữa ảnh, khoảng 35% | 709/720 | 21 | 696/699 |
 
-The occlusion perturbation left **three wrong predictions accepted**. This demonstrates a limitation of max-softmax abstention on a controlled perturbation. These altered copies are not independent real-world samples and cannot establish production accuracy or optimal threshold.
+Phép che giữa ảnh vẫn để lọt **3 dự đoán sai**. Đây là ảnh nhân tạo, không dùng để suy ra độ chính xác ở điều kiện thật. Chi tiết trong `synthetic_sensitivity_report.json` của run local.
 
-## Candidate configuration and W4 handoff
+## Ngưỡng bàn giao
 
-The local `threshold_candidate.json` records threshold `0.90`, class order, normalization, crop mode, checkpoint hash, selected epoch, and status `candidate_not_production_validated`. The value is a starting configuration for W4, **not an optimized or production-validated threshold**. Validation has no raw mistakes, so it cannot measure whether UNKNOWN rejects ordinary model errors. Evaluation on independent camera conditions and labeled hard cases is needed before choosing a production threshold. Keep ground truth in evaluation only; inference should use the image and model scores.
-
-For W4, load the frozen checkpoint and candidate configuration, check their architecture/class order/hash, apply the same crop preprocessing, and expose the raw class, both scores, maximum score, and final label. Preserve UNKNOWN as a distinct outcome. Collect labeled low-light, occluded, shifted-camera, and empty-with-object examples for a separate error/coverage study before promoting the candidate threshold.
-
-Verification: `python -m pytest ai-service/tests -q` passed **14 tests**. The train, validation, and test manifest SHA-256 values and checkpoint hash remained unchanged after analysis.
+`threshold_candidate.json` lưu ngưỡng `0,90`, class order, chuẩn hóa, crop mode, hash checkpoint và epoch; trạng thái là `candidate_not_production_validated`. W4 cần nạp đúng checkpoint/cấu hình, trả raw label, hai scores, confidence và nhãn cuối. Cần thêm ảnh có nhãn từ camera đích, gồm ánh sáng yếu, che khuất, camera dịch và vật trong ô trống, trước khi chọn ngưỡng triển khai. W3 từng chạy 14 test PASS; đây là số liệu lịch sử, không thay cho kết quả kiểm thử hiện tại.

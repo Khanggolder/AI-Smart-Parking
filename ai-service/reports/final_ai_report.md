@@ -1,4 +1,6 @@
-# Báo cáo kỹ thuật AI Smart Parking — bản RC v0.1.0-rc1
+# Báo cáo kỹ thuật AI Smart Parking — bản lịch sử v0.1.0-rc1
+
+Đây là báo cáo tại thời điểm W6/rc1. Gói hiện hành là `v0.1.0-rc2`; xem [Model Card](../docs/MODEL_CARD.md) và [Release README](../docs/RELEASE_README.md) cho trạng thái bàn giao hiện tại.
 
 ## 1. Bài toán và phạm vi
 

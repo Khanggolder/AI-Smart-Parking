@@ -1,65 +1,42 @@
 # AI Smart Parking
 
-**Xây dựng hệ thống giám sát và quản lý bãi đỗ xe thông minh ứng dụng Computer Vision và AI**
+Đồ án giám sát bãi đỗ xe bằng ảnh từ **một camera cố định**. Người quản trị cấu hình polygon cho từng ô; AI phân loại vùng ảnh thành `empty` hoặc `occupied` và trả `unknown` khi điểm tin cậy dưới ngưỡng. Backend dự kiến quản lý snapshot, lịch sử, trạng thái FULL/STALE; frontend dự kiến hiển thị kết quả và cho chỉnh polygon.
 
-> Đồ án thực tế Công nghệ phần mềm • Trường Đại học Giao thông vận tải TP. HCM (UTH)  
-> **Giai đoạn:** Chuẩn bị review scope, SRS, WBS và Git Workspace (18/10/2026).  
-> **Trạng thái:** Dự án đang khởi động — chưa có mô hình hoặc ứng dụng hoàn chỉnh.
+## Trạng thái hiện tại
 
-## Bài toán
-
-Từ ảnh chụp của **một camera cố định**, quản trị viên định nghĩa các vị trí đỗ bằng polygon. Hệ thống dùng mô hình phân loại ảnh ô đỗ để dự đoán `empty` / `occupied`; trả `unknown` nếu không đủ tin cậy. Giao diện hiển thị các vùng có màu, tổng số ô, ô trống/đã chiếm/chưa xác định, cảnh báo đầy bãi, lịch sử và xác minh của nhân viên.
-
-**Lưu ý:** Nhãn gốc dataset (*ground truth*) chỉ dùng để huấn luyện/đánh giá. Demo phải chạy suy luận thật trên ảnh đầu vào, không đọc nhãn sẵn để giả lập kết quả AI.
-
-## Phạm vi MVP (dự kiến chốt với giảng viên)
-
-- Đăng nhập/phân quyền `Admin` và `Operator`.
-- 01 bãi xe thử nghiệm, 01 camera cố định; ảnh tham chiếu để tạo/sửa/xóa polygon ô đỗ.
-- Upload ảnh JPEG/PNG; suy luận cho từng ô; các trạng thái `empty`, `occupied`, `unknown`.
-- Thống kê sức chứa, FULL khi **có ít nhất 1 ô hợp lệ** và tất cả ô đều occupied; STALE khi dữ liệu quá thời hạn cấu hình.
-- Lưu snapshot, model version, dự đoán, lịch sử, thao tác xác minh; lọc và xuất báo cáo CSV.
-
-**Ngoài phạm vi:** thu phí, đặt chỗ, nhận diện biển số, cổng ra/vào, streaming camera 24/7, đa camera quy mô lớn, ước lượng thời gian đỗ chính xác đến giây.
-
-## Công nghệ dự kiến
-
-| Thành phần | Công nghệ |
-|---|---|
-| Frontend | React + Vite |
-| Backend nghiệp vụ | FastAPI (Python) |
-| Cơ sở dữ liệu | PostgreSQL |
-| AI | PyTorch, MobileNetV3-Small/ResNet18 (baseline) |
-| Triển khai thử nghiệm | Docker Compose |
-| Quản lý | GitHub Issues, feature branches, Pull Requests |
-
-Đây là công nghệ **đề xuất**, có thể thay đổi sau khi kiểm tra dữ liệu mẫu.
-
-## Thành viên
-
-| Thành viên | Vai trò | Phần việc chính |
+| Phần | Đã có trong repository | Việc còn lại |
 |---|---|---|
-| Nguyễn Duy Khang | Nhóm trưởng / AI–Data | Dataset, annotation, splits, mô hình, inference, đánh giá |
-| Nguyễn Hoài Nam | Backend / BA | SRS, Use Case, ERD/API, auth, CRUD, tích hợp |
-| Nguyễn Hoàng Minh Khôi | Frontend / DevOps | UI/UX, polygon editor, dashboard, Docker, demo |
+| AI | Mã chuẩn bị dữ liệu, huấn luyện, đánh giá và FastAPI inference; đã kiểm thử riêng trên UFPR04 | Bàn giao checkpoint ngoài Git, thử trên máy đích và camera triển khai |
+| Backend | SRS, use case, ERD và bản thiết kế API | Chưa có API chạy; cần hiện thực và tích hợp với AI |
+| Frontend | Phạm vi giao diện trong tài liệu | Chưa có ứng dụng chạy; cần hiện thực dashboard và polygon editor |
+| Toàn hệ thống | Hợp đồng và [kế hoạch nối backend ↔ AI](ai-service/docs/BACKEND_AI_INTEGRATION_PLAN.md) | Chưa có bằng chứng chạy end-to-end |
 
-Cả nhóm tham gia review chéo, kiểm thử và vấn đáp.
+AI nhận ảnh và polygon đã cấu hình, tạo crop 224×224, chạy MobileNetV3-Small hai lớp, rồi áp ngưỡng softmax `0,90` cho `unknown`. AI **không** phát hiện ô đỗ, không tính FULL/STALE và không lưu database. Bộ test độc lập UFPR04 gồm 740 crop: accuracy trước ngưỡng **97,973%**, occupied-F1 **97,288%**; sau ngưỡng có 28 `unknown` và còn 2 trường hợp occupied bị nhận thành empty. Đây là kết quả trên tập dữ liệu đã thử, chưa chứng minh chất lượng ở camera khác. Xem [báo cáo W5](ai-service/reports/w5_evaluation_report.md).
 
-## Tài liệu & workspace
+## Phạm vi dự kiến
 
-- [SRS sơ bộ (bản tóm tắt)](docs/requirements/SRS-draft.md)
-- [WBS sơ bộ (bản tóm tắt)](docs/planning/WBS-draft.md)
-- [Hướng dẫn cộng tác Git](CONTRIBUTING.md)
-- [Cấu trúc workspace](docs/WORKSPACE.md)
+Một bãi thử nghiệm, một camera, snapshot JPEG/PNG, khoảng 100 ô. Admin cấu hình bãi/camera/polygon; Operator xem và xác minh; hệ thống dự kiến lưu lịch sử, thống kê và báo cáo. FULL chỉ khi có ít nhất một ô hợp lệ và mọi ô đều `occupied`; STALE do backend xác định từ thời điểm snapshot. Các chức năng nghiệp vụ này hiện vẫn là **thiết kế**, chưa phải tính năng đã chạy.
 
-**Ngày 18/10/2026:** review tên đề tài, phạm vi, deliverables, SRS/WBS và Git Workspace. **W1–W6** chỉ là kế hoạch dự kiến, chưa phải lịch học chính thức.
+## Công nghệ và thành viên
 
-## Nguồn dữ liệu dự kiến
+| Thành phần | Công nghệ trong mã hoặc thiết kế | Phụ trách |
+|---|---|---|
+| AI | Python 3.11, PyTorch/torchvision, OpenCV, FastAPI, MobileNetV3-Small | Nguyễn Duy Khang |
+| Backend | FastAPI, PostgreSQL (thiết kế) | Nguyễn Hoài Nam |
+| Frontend | React, Vite (dự kiến) | Nguyễn Hoàng Minh Khôi |
+| Triển khai | Docker Compose (kế hoạch) | Cả nhóm, Khôi phụ trách chính |
 
-- [PKLot](https://web.inf.ufpr.br/vri/databases/parking-lot-database/)
-- [MetaPKLot](https://github.com/DSBD-Research/MetaPKLot-Dataset)
+## Tìm nhanh trong repository
 
-Chưa kết luận chất lượng hoặc quyền phân phối lại dữ liệu trước khi tải và kiểm tra điều khoản. **Không commit** dataset lớn, model weights, mật khẩu, token hoặc file `.env` thật.
+| Đường dẫn | Nội dung |
+|---|---|
+| [`ai-service/`](ai-service/README.md) | Hướng dẫn chạy AI; `src/` là inference, `scripts/` là dữ liệu/huấn luyện/đánh giá, `tests/` là kiểm thử |
+| [`ai-service/docs/AI_API_CONTRACT.md`](ai-service/docs/AI_API_CONTRACT.md) | API AI thực tế `/health`, `/ready`, `/v1/infer` |
+| [`ai-service/docs/BACKEND_AI_INTEGRATION_PLAN.md`](ai-service/docs/BACKEND_AI_INTEGRATION_PLAN.md) | Chỗ khác nhau giữa hợp đồng backend và API AI, cách chuyển đổi |
+| [`ai-service/reports/`](ai-service/reports/final_ai_report.md) | Báo cáo dữ liệu, confidence, test độc lập và benchmark |
+| [`backend/`](backend/README.md), [`frontend/`](frontend/README.md) | Phần việc chưa khởi tạo ứng dụng |
+| [`docs/`](docs/WORKSPACE.md) | SRS, WBS, thiết kế backend và quy tắc cộng tác |
 
----
-*Tài liệu khởi tạo workspace: 15/10/2026.*
+Xem [README AI](ai-service/README.md) để cài, kiểm thử và gọi service. Bản thiết kế nghiệp vụ ở [SRS](docs/requirements/SRS-draft.md) và [backend API contract](docs/api/backend-api-contract-v1.md); endpoint nội bộ `/predict` trong thiết kế backend **chưa khớp** `/v1/infer` của AI, nên cần Nam review adapter trước tích hợp.
+
+Không commit ảnh dữ liệu lớn, checkpoint, token hoặc `.env` thật. Model release `v0.1.0-rc2` được bàn giao riêng, không nằm trong bản clone GitHub.

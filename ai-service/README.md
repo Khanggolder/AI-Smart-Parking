@@ -4,7 +4,7 @@
 
 Camera cố định chụp một bãi xe; mỗi ô đỗ được xác định trước bằng một polygon (vùng đa giác). Module AI nhận ảnh, `camera_id` và danh sách `spot_id` cùng polygon, rồi trả một dự đoán cho từng ô: `empty` (trống), `occupied` (có xe) hoặc `unknown` (chưa đủ tự tin). Người quản trị cấu hình polygon; AI không tự tìm ô đỗ.
 
-AI chỉ phân loại vùng ảnh. Backend quản lý ảnh chụp, lưu kết quả và lịch sử, quyết định FULL/STALE; frontend hiển thị ô đỗ và cho phép chỉnh polygon. Bản hiện tại không có nhận diện biển số, theo dõi xe hay YOLO.
+AI chỉ phân loại vùng ảnh. Theo thiết kế, backend sẽ quản lý ảnh chụp, lưu kết quả và lịch sử, quyết định FULL/STALE; frontend sẽ hiển thị ô đỗ và cho phép chỉnh polygon. Hai ứng dụng này chưa có mã chạy trong repository. Phần AI không có nhận diện biển số, theo dõi xe hay YOLO.
 
 ## Công nghệ và cách hoạt động
 
