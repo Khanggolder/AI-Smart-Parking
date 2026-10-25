@@ -24,6 +24,7 @@ datasets/
 models/
 weights/
 runs/
+releases/
 outputs/
 *.pt
 *.pth

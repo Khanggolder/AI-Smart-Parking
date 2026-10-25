@@ -1,0 +1,53 @@
+{
+  "config": {
+    "max_days": 12,
+    "per_day": 10,
+    "seed": 42,
+    "size": 224,
+    "mode": "mask",
+    "data_dir": "data/metapklot",
+    "manifests_dir": "ai-service/manifests",
+    "reports_dir": "ai-service/reports"
+  },
+  "splits": {
+    "train": {
+      "dates": [
+        "2012-12-14",
+        "2012-12-15",
+        "2012-12-19",
+        "2012-12-20",
+        "2012-12-23",
+        "2013-01-16",
+        "2013-01-19",
+        "2013-01-20"
+      ],
+      "panorama_images_with_crops": 80,
+      "empty": 1724,
+      "occupied": 1176,
+      "crops": 2900
+    },
+    "val": {
+      "dates": [
+        "2012-12-18",
+        "2012-12-28"
+      ],
+      "panorama_images_with_crops": 20,
+      "empty": 348,
+      "occupied": 372,
+      "crops": 720
+    },
+    "test": {
+      "dates": [
+        "2012-12-21",
+        "2012-12-24"
+      ],
+      "panorama_images_with_crops": 20,
+      "empty": 464,
+      "occupied": 276,
+      "crops": 740
+    }
+  },
+  "anomalies": {
+    "invalid_contour": 0
+  }
+}

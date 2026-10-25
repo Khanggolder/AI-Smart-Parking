@@ -1,0 +1,8 @@
+checkpoint: runs/mobilenetv3_gpu/best.pt
+threshold_config: runs/mobilenetv3_gpu/confidence/threshold_candidate.json
+device: auto
+batch_size: 32
+max_spots: 100
+max_upload_bytes: 10485760
+max_image_pixels: 20000000
+port: 8001
