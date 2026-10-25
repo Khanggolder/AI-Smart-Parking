@@ -20,7 +20,7 @@ flowchart LR
     F --> G[JSON theo thứ tự spot ID]
 ```
 
-Crop giữ vùng trong polygon, tô xám phần ngoài và thêm viền để đạt khung 224×224 mà không kéo méo hình. Model cho hai điểm softmax; điểm lớn nhất là `confidence`. Nếu điểm này **nhỏ hơn 0,90**, kết quả cuối là `unknown` nhưng `raw_label` vẫn cho biết lớp model chọn. `unknown` là quy tắc từ chối dự đoán, **không phải lớp thứ ba được huấn luyện**. Điểm softmax chưa được hiệu chuẩn thành xác suất dự đoán đúng. Xem [System Overview](docs/SYSTEM_OVERVIEW.md) để theo dõi từng bước.
+Crop giữ vùng trong polygon, tô xám phần ngoài và thêm viền để đạt khung 224×224 mà không kéo méo hình. Model cho hai điểm softmax; điểm lớn nhất là `confidence`. Nếu điểm này **nhỏ hơn 0,90**, kết quả cuối là `unknown` nhưng `raw_label` vẫn cho biết lớp model chọn. `unknown` là quy tắc từ chối dự đoán, **không phải lớp thứ ba được huấn luyện**. Điểm softmax chưa được hiệu chuẩn thành xác suất dự đoán đúng.
 
 ## Dữ liệu và kết quả
 
@@ -67,7 +67,7 @@ File `spots.json` chứa mảng JSON như `[{"spot_id":"P01","polygon":[[0.12,0.
 .\.venv\Scripts\python.exe -m pytest ai-service/tests -q
 ```
 
-Các bài `test_baseline_utils.py`, `test_confidence_utils.py`, `test_preprocessing.py`, `test_prepare_dataset.py` chủ yếu kiểm logic bằng input tạo trong test; `test_service.py`, `test_inference.py`, `test_model_loader.py` dùng fixture/mock hoặc file tạm. Một số bài trong `test_w5_evaluation.py` cần manifest/checkpoint/artifact W5 đã sinh; bản clone sạch có thể không chạy toàn bộ suite. Không coi việc thiếu tài nguyên là model PASS; xem từng lỗi thực tế và [hướng dẫn đọc source](docs/SOURCE_CODE_GUIDE.md). Không chạy lại official W5 test chỉ để kiểm tài liệu.
+Các bài `test_baseline_utils.py`, `test_confidence_utils.py`, `test_preprocessing.py`, `test_prepare_dataset.py` chủ yếu kiểm logic bằng input tạo trong test; `test_service.py` và `test_inference.py` dùng mock, nhưng `test_model_loader.py` và `test_w5_evaluation.py` có bài cần checkpoint và kết quả W5 lưu ngoài Git. Bản clone sạch có thể không chạy toàn bộ bộ test. Không coi lỗi thiếu dữ liệu là kết quả kiểm thử model; không chạy lại W5 chỉ để kiểm tài liệu.
 
 ## Tìm đúng file
 
@@ -78,6 +78,6 @@ Các bài `test_baseline_utils.py`, `test_confidence_utils.py`, `test_preprocess
 | Polygon, ảnh, tensor và crop W1 | [`src/preprocessing.py`](src/preprocessing.py), [`src/w1_crop.py`](src/w1_crop.py) |
 | Trọng số, phiên bản model, UNKNOWN | [`src/model_loader.py`](src/model_loader.py), [`src/confidence_utils.py`](src/confidence_utils.py) |
 | Chuẩn bị dữ liệu, huấn luyện | [`scripts/prepare_dataset.py`](scripts/prepare_dataset.py), [`scripts/train_baseline.py`](scripts/train_baseline.py) |
-| Kiểm chứng kết quả | [`reports/final_ai_report.md`](reports/final_ai_report.md), [`reports/INDEX.md`](reports/INDEX.md) |
+| Kiểm chứng kết quả | [`reports/final_ai_report.md`](reports/final_ai_report.md), [`reports/w5_evaluation_report.md`](reports/w5_evaluation_report.md) |
 
-Đọc tiếp: [Source Code Guide](docs/SOURCE_CODE_GUIDE.md) để đi theo luồng gọi hàm, [Defense Guide](docs/DEFENSE_GUIDE.md) để tập giải thích, [System Overview](docs/SYSTEM_OVERVIEW.md) để xem ranh giới hệ thống, [Backend ↔ AI plan](docs/BACKEND_AI_INTEGRATION_PLAN.md) khi tích hợp. Công cụ AI có hỗ trợ quá trình phát triển tài liệu và mã; các mô tả ở đây cần được kiểm lại bằng source, test và báo cáo gốc.
+Đọc thêm: [AI API Contract](docs/AI_API_CONTRACT.md) để biết cách gọi API, [Model Card](docs/MODEL_CARD.md) để xem thông tin mô hình và [Backend ↔ AI plan](docs/BACKEND_AI_INTEGRATION_PLAN.md) khi tích hợp. Công cụ AI có hỗ trợ quá trình phát triển tài liệu và mã; các mô tả ở đây cần được kiểm lại bằng source, test và báo cáo gốc.
