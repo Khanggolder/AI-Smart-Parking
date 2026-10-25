@@ -1,6 +1,6 @@
 # W8 Git finalization and post-merge verification
 
-Date: 2026-10-25. AI source branch `feature/ai-w0-w7` was created from `feature/ai-dataset-inspection` without resetting/stashing user work. Original AI W0 commit: `25e1eaa529f02292d31c40914624aad1fec8c9ee`. Audited W1–W7 source commit: `f9bd78c` (`feat(ai): complete W0-W7 inference service and evaluation`), 67 files: `.gitignore` and `ai-service/` only. Merge commit `11908bf` imports `origin/main` at `8b307a296bcc14bd8cbad8149146676f29e58865` with no conflicts; it added Nam's three backend design documents unchanged. `git diff origin/main...HEAD` contains no backend/frontend/docs changes beyond the AI branch's own files. No force push, reset, branch deletion or PR merge was performed.
+Date: 2026-10-25. AI source branch `feature/ai-w0-w7` was created from `feature/ai-dataset-inspection` without resetting/stashing user work. Original AI W0 commit: `25e1eaa529f02292d31c40914624aad1fec8c9ee`. Audited W1–W7 source commit: `f9bd78c` (`feat(ai): complete W0-W7 inference service and evaluation`), 67 files: `.gitignore` and `ai-service/` only. Merge commit `11908bf` imports `origin/main` at `8b307a296bcc14bd8cbad8149146676f29e58865` with no conflicts; it added Nam's three backend design documents unchanged. Documentation commit `68d2557` records verification and handover. `git diff origin/main...HEAD` contains no backend/frontend/docs changes beyond the AI branch's own files. No force push, reset, branch deletion or PR merge was performed.
 
 ## Staging and repository checks
 
@@ -21,6 +21,10 @@ Date: 2026-10-25. AI source branch `feature/ai-w0-w7` was created from `feature/
 | `git diff --check origin/main...HEAD` | PASS |
 
 The rc2 `release_manifest.json` **still records `source_commit=25e1eaa`**, the W0 base at package build time. Its `source_snapshot` explicitly says W7 uncommitted source; the ZIP was built before commit `f9bd78c`, even though the eight packaged source files are byte-identical to that later commit. This distinction is preserved; no historical manifest was edited and no rc3 was built because code/weights/config are unchanged. The ZIP is distributed separately from Git. W5 official test was not rerun or used for tuning.
+
+## GitHub review state
+
+Branch was pushed to `origin/feature/ai-w0-w7`. [PR #9 — feat(ai): Complete W0–W7 AI Inference Service](https://github.com/Khanggolder/AI-Smart-Parking/pull/9) targets `main`, remains open and unmerged. Review requests were sent to Nam (`hoainam190205`) and Khôi (`mkay263`). PR links `Closes #5` and references #1, #4 and [integration Issue #10](https://github.com/Khanggolder/AI-Smart-Parking/issues/10). No issue was closed in W8. GitHub's mergeability field was still calculating (`unknown`) when first fetched; review/merge must wait for GitHub's final check and team approval.
 
 ## Integration and remaining gates
 
