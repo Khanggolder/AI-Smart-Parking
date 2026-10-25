@@ -31,3 +31,6 @@ outputs/
 *.onnx
 *.ckpt
 *.sqlite3
+# Include Backend ORM source code
+!backend/app/models/
+!backend/app/models/*.py
