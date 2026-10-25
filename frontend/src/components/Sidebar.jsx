@@ -1,4 +1,6 @@
 
+import { NavLink } from "react-router-dom";
+
 import {
   LayoutDashboard,
   CarFront,
@@ -9,15 +11,15 @@ import {
 } from "lucide-react";
 
 const menuItems = [
-  { name: "Dashboard", icon: LayoutDashboard },
-  { name: "Quản lý bãi xe", icon: CarFront },
-  { name: "Camera", icon: Camera },
-  { name: "Vẽ ô đỗ", icon: ParkingCircle },
-  { name: "Lịch sử", icon: History },
-  { name: "Báo cáo", icon: ChartColumn },
+  { name: "Dashboard", path: "/", icon: LayoutDashboard },
+  { name: "Quản lý bãi xe", path: "/parking-lots", icon: CarFront },
+  { name: "Camera", path: "/cameras", icon: Camera },
+  { name: "Vẽ ô đỗ", path: "/polygon-editor", icon: ParkingCircle },
+  { name: "Lịch sử", path: "/history", icon: History },
+  { name: "Báo cáo", path: "/reports", icon: ChartColumn },
 ];
 
-function Sidebar({ activePage, onNavigate }) {
+function Sidebar() {
   return (
     <aside className="sidebar">
       <h2>AI Smart Parking</h2>
@@ -27,19 +29,17 @@ function Sidebar({ activePage, onNavigate }) {
           const Icon = item.icon;
 
           return (
-            <button
-              type="button"
-              key={item.name}
-              className={
-                activePage === item.name
-                  ? "menu-item active"
-                  : "menu-item"
+            <NavLink
+              key={item.path}
+              to={item.path}
+              end={item.path === "/"}
+              className={({ isActive }) =>
+                isActive ? "menu-item active" : "menu-item"
               }
-              onClick={() => onNavigate(item.name)}
             >
               <Icon size={20} />
               <span>{item.name}</span>
-            </button>
+            </NavLink>
           );
         })}
       </nav>
