@@ -4,7 +4,7 @@ Repository: `Khanggolder/AI-Smart-Parking`. Read GitHub Issues #1–#6 and PRs #
 
 | Issue | Owner in issue | Evidence and disposition |
 |---|---|---|
-| [#1](https://github.com/Khanggolder/AI-Smart-Parking/issues/1) W0 dataset | Khang | `dataset_inspection.md` has 5 image IDs/files, 37 polygons and occupied/empty counts; five overlays are tracked and licensing/attribution noted. Report explicitly says manual visual inspection remains required. Keep open; `Refs #1` in PR until visual sign-off. |
+| [#1](https://github.com/Khanggolder/AI-Smart-Parking/issues/1) W0 dataset | Khang | `dataset_inspection.md` has 5 image IDs/files, 37 polygons and occupied/empty counts; five overlays are tracked and licensing/attribution noted. W8 visually opened all five overlays: polygons generally align with bays, but tree occlusion makes some empty-space interpretation uncertain. Keep open for Khang/team visual sign-off and license attribution confirmation; `Refs #1` in PR. |
 | [#2](https://github.com/Khanggolder/AI-Smart-Parking/issues/2) SRS | Nam | Open; outside AI ownership. |
 | [#3](https://github.com/Khanggolder/AI-Smart-Parking/issues/3) workspace/wireframe | Khôi | Open; outside AI ownership. |
 | [#4](https://github.com/Khanggolder/AI-Smart-Parking/issues/4) ERD/API | Nam | PR #8 merged design documents, but backend↔AI endpoint, multipart/schema and persistence still need agreement and implementation. Keep open; `Refs #4`. |
