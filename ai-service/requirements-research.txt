@@ -1,0 +1,5 @@
+# Optional W0-W5 dataset inspection and research plots.
+# Keep requirements.txt as the existing development install path.
+-r requirements.txt
+huggingface_hub==2.3.0
+matplotlib==3.11.2
