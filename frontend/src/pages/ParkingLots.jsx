@@ -29,6 +29,7 @@ const columns = [
 export default function ParkingLots({
   role = "operator",
   demo = false,
+  demostate = "ready",
 }) {
   return (
     <ResourceManager
@@ -41,6 +42,7 @@ export default function ParkingLots({
       loadRows={fetchParkingLots}
       createItem={createParkingLot}
       updateItem={updateParkingLot}
+      demoState={demostate}
     />
   );
 }

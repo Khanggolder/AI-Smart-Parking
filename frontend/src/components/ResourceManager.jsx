@@ -14,7 +14,7 @@ function getErrorMessage(error) {
     return error.response.data.error.message;
   }
 
-  if (!error.response && error.code === "ERR_NETWORK") {
+  if (error.code === "ERR_NETWORK") {
     return "Không kết nối được Backend. Hãy kiểm tra API.";
   }
 
@@ -27,6 +27,7 @@ export default function ResourceManager({
   columns,
   role,
   demo = false,
+  demoState = "ready",
   initialRows = [],
   loadRows,
   createItem,
@@ -36,12 +37,16 @@ export default function ResourceManager({
   const [rows, setRows] = useState(
     demo ? initialRows : []
   );
+
   const [loading, setLoading] = useState(!demo);
+  const [loadError, setLoadError] = useState("");
+  const [actionError, setActionError] = useState("");
+  const [retryKey, setRetryKey] = useState(0);
+
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({});
   const [showForm, setShowForm] = useState(false);
-  const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
   const isAdmin = role === "admin";
@@ -53,10 +58,15 @@ export default function ResourceManager({
 
     loadRows()
       .then((data) => {
-        if (active) setRows(data);
+        if (!active) return;
+
+        setRows(data);
+        setLoadError("");
       })
-      .catch((err) => {
-        if (active) setError(getErrorMessage(err));
+      .catch((error) => {
+        if (active) {
+          setLoadError(getErrorMessage(error));
+        }
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -65,30 +75,58 @@ export default function ResourceManager({
     return () => {
       active = false;
     };
-  }, [demo, loadRows]);
+  }, [demo, loadRows, retryKey]);
+
+  // Chỉ giả lập trạng thái khi chạy DEV Preview.
+  const previewState = demo ? demoState : "ready";
+
+  const isLoading =
+    previewState === "loading" ||
+    (!demo && loading);
+
+  const displayError =
+    previewState === "error"
+      ? "Không tải được dữ liệu (lỗi giả lập để kiểm thử)."
+      : loadError;
+
+  const visibleRows =
+    previewState === "empty" ? [] : rows;
+
+  const isReady = !isLoading && !displayError;
+
+  function handleRetry() {
+    if (demo) return;
+
+    setLoading(true);
+    setLoadError("");
+    setRetryKey((value) => value + 1);
+  }
 
   function startCreate() {
     setEditingId(null);
     setForm({});
-    setError("");
+    setActionError("");
+    setMessage("");
     setShowForm(true);
   }
 
   function startEdit(row) {
-    setEditingId(row.id);
-
     const values = {};
+
     fields.forEach((field) => {
       values[field.key] = row[field.key] ?? "";
     });
 
+    setEditingId(row.id);
     setForm(values);
-    setError("");
+    setActionError("");
+    setMessage("");
     setShowForm(true);
   }
 
   async function handleSubmit(event) {
     event.preventDefault();
+
     if (!isAdmin) return;
 
     const payload = {};
@@ -100,7 +138,7 @@ export default function ResourceManager({
     });
 
     setSaving(true);
-    setError("");
+    setActionError("");
     setMessage("");
 
     try {
@@ -138,13 +176,14 @@ export default function ResourceManager({
 
       setMessage(
         demo
-          ? "Đã cập nhật dữ liệu mẫu (không lưu Backend)."
-          : "Đã lưu dữ liệu thành công."
+          ? "Đã cập nhật dữ liệu mẫu, không lưu Backend."
+          : "Lưu dữ liệu thành công."
       );
+
       setShowForm(false);
       setEditingId(null);
-    } catch (err) {
-      setError(getErrorMessage(err));
+    } catch (error) {
+      setActionError(getErrorMessage(error));
     } finally {
       setSaving(false);
     }
@@ -160,6 +199,7 @@ export default function ResourceManager({
     setRows((current) =>
       current.filter((row) => row.id !== id)
     );
+
     setMessage("Đã xóa khỏi dữ liệu demo.");
   }
 
@@ -167,14 +207,14 @@ export default function ResourceManager({
     <section className="content-card manager">
       {demo && (
         <p className="manager-demo">
-          DEV PREVIEW – Dữ liệu giả lập, không gọi Backend
+          DEV PREVIEW – Không gọi Backend
         </p>
       )}
 
       <div className="manager-toolbar">
         <h2>{title}</h2>
 
-        {isAdmin && (
+        {isAdmin && isReady && (
           <button
             className="manager-primary"
             type="button"
@@ -187,21 +227,77 @@ export default function ResourceManager({
 
       <p className="manager-hint">
         {isAdmin
-          ? "Quyền Admin: xem, thêm và chỉnh sửa."
-          : "Quyền Operator: chỉ xem dữ liệu."}
+          ? "Admin: xem, thêm và chỉnh sửa."
+          : "Operator: chỉ xem dữ liệu."}
       </p>
 
-      {loading && <p>Đang tải dữ liệu...</p>}
-      {error && (
-        <p className="manager-error" role="alert">
-          {error}
+      {message && (
+        <p className="manager-success" role="status">
+          {message}
         </p>
       )}
-      {message && (
-        <p className="manager-success">{message}</p>
+
+      {actionError && (
+        <p className="manager-error" role="alert">
+          {actionError}
+        </p>
       )}
 
-      {!loading && (
+      {/* Loading */}
+      {isLoading && (
+        <div className="manager-state" role="status">
+          <div
+            className="manager-spinner"
+            aria-hidden="true"
+          />
+
+          <h3>Đang tải dữ liệu...</h3>
+          <p>Vui lòng chờ hệ thống xử lý.</p>
+        </div>
+      )}
+
+      {/* Error */}
+      {!isLoading && displayError && (
+        <div className="manager-state" role="alert">
+          <div className="manager-state-icon">
+            !
+          </div>
+
+          <h3>Không thể tải dữ liệu</h3>
+          <p>{displayError}</p>
+
+          {!demo && (
+            <button
+              type="button"
+              className="manager-primary"
+              onClick={handleRetry}
+            >
+              Thử lại
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Empty */}
+      {isReady && visibleRows.length === 0 && (
+        <div className="manager-state" role="status">
+          <div className="manager-state-icon">
+            ∅
+          </div>
+
+          <h3>Chưa có dữ liệu</h3>
+
+          <p>
+            Danh sách hiện đang trống.
+            {isAdmin
+              ? " Bạn có thể thêm mục mới."
+              : " Vui lòng liên hệ Admin nếu cần cập nhật."}
+          </p>
+        </div>
+      )}
+
+      {/* Data table */}
+      {isReady && visibleRows.length > 0 && (
         <div className="manager-table-wrap">
           <table className="manager-table">
             <thead>
@@ -211,73 +307,64 @@ export default function ResourceManager({
                     {column.label}
                   </th>
                 ))}
+
                 {isAdmin && <th>Thao tác</th>}
               </tr>
             </thead>
 
             <tbody>
-              {rows.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={
-                      columns.length + (isAdmin ? 1 : 0)
-                    }
-                  >
-                    Chưa có dữ liệu.
-                  </td>
-                </tr>
-              ) : (
-                rows.map((row) => (
-                  <tr key={row.id}>
-                    {columns.map((column) => (
-                      <td key={column.key}>
-                        {row[column.key] ?? "—"}
-                      </td>
-                    ))}
+              {visibleRows.map((row) => (
+                <tr key={row.id}>
+                  {columns.map((column) => (
+                    <td key={column.key}>
+                      {row[column.key] ?? "—"}
+                    </td>
+                  ))}
 
-                    {isAdmin && (
-                      <td className="manager-actions">
+                  {isAdmin && (
+                    <td className="manager-actions">
+                      <button
+                        type="button"
+                        onClick={() => startEdit(row)}
+                      >
+                        Sửa
+                      </button>
+
+                      {demo && (
                         <button
                           type="button"
-                          onClick={() => startEdit(row)}
+                          onClick={() =>
+                            deleteDemo(row.id)
+                          }
                         >
-                          Sửa
+                          Xóa demo
                         </button>
-
-                        {demo && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              deleteDemo(row.id)
-                            }
-                          >
-                            Xóa demo
-                          </button>
-                        )}
-                      </td>
-                    )}
-                  </tr>
-                ))
-              )}
+                      )}
+                    </td>
+                  )}
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
       )}
 
-      {showForm && isAdmin && (
+      {/* Create / Edit form */}
+      {showForm && isAdmin && isReady && (
         <form
           className="manager-form"
           onSubmit={handleSubmit}
         >
           <h3>
             {editingId !== null
-              ? "Chỉnh sửa"
+              ? "Chỉnh sửa thông tin"
               : "Thêm mới"}
           </h3>
 
           {fields.map((field) => (
             <label key={field.key}>
               {field.label}
+
               <input
                 type="text"
                 required={field.required}
@@ -297,8 +384,8 @@ export default function ResourceManager({
           <div className="manager-actions">
             <button
               className="manager-primary"
-              disabled={saving}
               type="submit"
+              disabled={saving}
             >
               {saving ? "Đang lưu..." : "Lưu"}
             </button>
@@ -315,9 +402,8 @@ export default function ResourceManager({
       )}
 
       <p className="manager-hint">
-        API xóa bãi xe/camera chưa có trong Backend
-        Contract v1. Nút xóa chỉ xuất hiện trong
-        chế độ demo.
+        Chức năng xóa bãi xe/camera chỉ dùng
+        trong DEV Preview, chưa có API thật.
       </p>
     </section>
   );

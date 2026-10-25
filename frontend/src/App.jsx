@@ -182,12 +182,6 @@ function App() {
               element={<Cameras role={auth.role} />}
             />
 
-
-            <Route
-              path="/cameras"
-              element={<ComingSoon title="Camera" />}
-            />
-
             <Route element={<AdminRoute auth={auth} />}>
               <Route
                 path="/polygon-editor"
@@ -231,29 +225,51 @@ function App() {
   );
 }
 
+
 function DevPreview({ page }) {
   const [params] = useSearchParams();
+
   const role =
     params.get("role") === "operator"
       ? "operator"
       : "admin";
 
+  const requestedState = params.get("state");
+
+  const demoState = [
+    "ready",
+    "loading",
+    "error",
+    "empty",
+  ].includes(requestedState)
+    ? requestedState
+    : "ready";
+
   return (
     <main className="main-content">
       <h1>UI Preview – {role.toUpperCase()}</h1>
+
       <p className="manager-demo">
-        Chỉ dùng để kiểm tra giao diện khi phát triển.
-        Không có phiên đăng nhập thật.
+        Chế độ DEV – Dữ liệu mẫu, không sử dụng Backend.
       </p>
 
       {page === "parking-lots" ? (
-        <ParkingLots demo role={role} />
+        <ParkingLots
+          demo
+          role={role}
+          demoState={demoState}
+        />
       ) : (
-        <Cameras demo role={role} />
+        <Cameras
+          demo
+          role={role}
+          demoState={demoState}
+        />
       )}
     </main>
   );
 }
+
 
 
 export default App;
