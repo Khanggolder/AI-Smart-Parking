@@ -185,7 +185,7 @@ function App() {
             <Route element={<AdminRoute auth={auth} />}>
               <Route
                 path="/polygon-editor"
-                element={<ComingSoon title="Vẽ ô đỗ" />}
+                element={<PolygonEditor role={auth.role} />}
               />
             </Route>
 
