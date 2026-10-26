@@ -14,12 +14,18 @@ class Settings(BaseSettings):
     # Deliberately no default signing key; set JWT_SECRET_KEY in the local .env.
     jwt_secret_key: str | None = None
     jwt_expire_minutes: int = 60
+    # Comma-separated trusted local React origins; no wildcard in dev.
+    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
     model_config = SettingsConfigDict(
         env_file=REPOSITORY_ROOT / ".env",
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
+    @property
+    def cors_allowed_origins(self) -> list[str]:
+        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
 
     @property
     def sqlalchemy_database_url(self) -> str:
