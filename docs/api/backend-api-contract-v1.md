@@ -250,3 +250,40 @@ FastAPI trả 422 mặc định cho lỗi schema; khi hiện thực cần chuẩ
 **Audit:** Mỗi thao tác tạo hoặc cập nhật có thay đổi đều ghi `audit_logs` cùng transaction với dữ liệu nghiệp vụ; không phải tạo migration mới vì schema đã đủ.
 
 **CORS development:** Mặc định cho phép hai React origin `http://localhost:5173` và `http://127.0.0.1:5173`. Có thể cấu hình `CORS_ORIGINS` trong `.env`; không mở wildcard ở môi trường triển khai.
+
+
+## 9. W3 phase 1 — Parking Spot Polygon API (FR-03 / FR-04)
+
+These endpoints are now implemented in W3 Backend; remaining W3 image upload
+and Frontend editor integration are tracked separately.
+
+- `GET /cameras/{camera_id}/spots?include_inactive=false`: Admin/Operator,
+  `200 {"items":[],"total":0,"camera_config_version":1}`. `include_inactive=true`
+  also returns soft-deactivated spots.
+- `POST /cameras/{camera_id}/spots`: Admin, requires `spot_code`, `polygon` and
+  **required** `expected_camera_config_version` (integer >= 1). `201` returns
+  `{id,camera_id,spot_code,polygon,is_active,camera_config_version}`.
+- `PATCH /spots/{spot_id}`: Admin, requires `expected_camera_config_version`
+  and either `spot_code` and/or `polygon`; no change → `200` with same version.
+- `DELETE /spots/{spot_id}?expected_camera_config_version=N`: Admin, `204`
+  with no response body. Soft-deletes (`is_active=false`) without removing
+  history or releasing the spot code.
+
+`polygon` uses a list of `{x,y}` with 3–50 **distinct** vertices. Every x/y is
+finite and in `[0,1]`. Degenerate, self-crossing or self-touching polygons are
+rejected `422`. `spot_code` is trimmed, uppercased and must be unique per camera
+(including deactivated spots); duplicates → `409 SPOT_CODE_CONFLICT`.
+There may be at most 100 active spots per camera, matching the AI service limit.
+
+Changes require the caller's *current* camera version: `409 CAMERA_VERSION_CONFLICT`
+if another write won. Each successful actual write increments `Camera.config_version`
+and writes `audit_logs` in the same transaction. `401` no/invalid token;
+`403` Operator write; `404` missing spot/camera; `409 SPOT_INACTIVE` when trying
+to change an already disabled spot.
+
+W3 phase 1 validates polygon geometry but **does not implement or enforce**
+reference-image upload/dimensions. W1 UC-01's prerequisite (valid camera reference
+image) remains an integration requirement and is not met by this API alone.
+`PUT /cameras/{camera_id}/reference-image` will be implemented separately before
+relying on polygon coordinates for real snapshots. AI adapter must map stored
+`{x,y}` to `[x,y]` when calling the existing `POST /v1/infer` service.

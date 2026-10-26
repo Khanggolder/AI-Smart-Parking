@@ -2,7 +2,7 @@
 
 **W2 / Task 3.1**: FastAPI, PostgreSQL, SQLAlchemy ORM (8 entities), Alembic,
 JWT login, Admin/Operator authorization, and parking lot/camera CRUD.
-Parking spots, reference-image upload, snapshots, AI integration, and public user-registration endpoints are **not implemented**.
+Reference-image upload, snapshots, AI integration, and public user-registration endpoints are **not implemented**.
 
 ## Prerequisites and local setup (Windows CMD)
 
@@ -127,3 +127,47 @@ cd /d D:\DATT\AI-Smart-Parking\backend
 In `/docs`, log in as Admin and select **Authorize** to test POST/PATCH.
 Log in as Operator to check that GET is allowed while POST/PATCH return 403.
 The CRUD tests use disposable SQLite; confirm saves persist in your real PostgreSQL as well.
+
+
+## W3 phase 1: parking spot polygons (FR-03/FR-04)
+
+Endpoints require JWT. Admin can create, edit and deactivate; Admin and Operator can list.
+All coordinates are normalized 0..1 **relative to one camera reference frame**.
+
+| Method | API path | Role | Result |
+| --- | --- | --- | --- |
+| GET | `/cameras/{camera_id}/spots?include_inactive=false` | Both | `200` with `{items,total,camera_config_version}` |
+| POST | `/cameras/{camera_id}/spots` | Admin | `201` |
+| PATCH | `/spots/{spot_id}` | Admin | `200` |
+| DELETE | `/spots/{spot_id}?expected_camera_config_version=N` | Admin | `204` soft-deactivate |
+
+Create payload:
+
+```json
+{
+  "spot_code": "P01",
+  "polygon": [{"x":0.10,"y":0.20},{"x":0.25,"y":0.20},{"x":0.25,"y":0.40}],
+  "expected_camera_config_version": 1
+}
+```
+
+Patch requires `expected_camera_config_version` and at least one of `spot_code`,
+`polygon`. Check the latest camera version in GET response. Every actual edit
+increments `camera.config_version` exactly once; a no-op patch does not. A
+stale version returns `409 CAMERA_VERSION_CONFLICT`. Deleted spots remain stored
+for history (and their spot codes remain reserved); `include_inactive=true`
+returns them for administrative inspection.
+
+Polygon validator rejects fewer than 3 or more than 50 points, repeated vertices,
+out-of-range coordinates, intersections/touching of nonadjacent edges and
+zero/tiny area. Spot code is case-normalized to uppercase and unique per camera.
+At most 100 **active** spots per camera are allowed for the AI service.
+All writes and audit log entries are committed together.
+
+**Integration boundary:** The React Polygon Editor route currently displays a
+placeholder on `main`; this PR exposes Backend APIs only. `PUT /cameras/{id}/reference-image`
+(image upload, dimensions and secure storage) is a subsequent W3 task, so saving
+polygon geometry here does not yet verify its correspondence to a reference
+image. Require a camera reference image before real snapshots/inference. The
+snapshot service must copy polygon and configuration version at capture time.
+No new Alembic migration is needed.
