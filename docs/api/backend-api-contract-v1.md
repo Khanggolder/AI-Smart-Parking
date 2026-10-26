@@ -1,6 +1,6 @@
 # AI Smart Parking — REST API Contract v1 (W1 / 2.2)
 
-**Trạng thái:** Thiết kế **chốt để triển khai** theo SRS/WBS; **chưa có API đang chạy**.  
+**Trạng thái:** Contract W1 chốt để triển khai. W2 đã hiện thực Health, Auth và CRUD Parking Lots/Cameras; các endpoint khác ở bảng bên dưới vẫn đang phát triển.  
 **Base URL:** `http://localhost:8000/api/v1` trong môi trường local.  
 **Data format:** JSON UTF-8, ngoại trừ upload snapshot (multipart) và xuất CSV (`text/csv`).
 
@@ -224,3 +224,29 @@ FastAPI trả 422 mặc định cho lỗi schema; khi hiện thực cần chuẩ
 - Nếu thay đổi breaking change, cập nhật file này trong **cùng PR** với code, đánh dấu phiên bản hoặc mô tả migration.
 - Frontend/AI xem tài liệu này trong repo, có thể tích hợp theo contract mà không cần chờ phê duyệt lại W1.
 - Mã lỗi, yêu cầu role và dữ liệu demo phải có integration test. Không gọi mock AI là inference thật.
+
+## 8. W2 – Hợp đồng hiện thực CRUD Parking Lots và Cameras (3.2)
+
+**Phân quyền:** Tất cả endpoint phần này yêu cầu Bearer JWT. Admin/Operator xem được; chỉ Admin được POST/PATCH. Operator ghi trả 403; không có token trả 401.
+
+**GET danh sách:**
+- `GET /parking-lots?limit=20&offset=0`
+- `GET /cameras?parking_lot_id=<uuid>&limit=20&offset=0`; bộ lọc `parking_lot_id` không bắt buộc.
+- Trả về `{"items":[],"total":0,"limit":20,"offset":0}`. Giới hạn `1 <= limit <= 100`; `offset >= 0`. Màn hình Frontend đã có hỗ trợ lấy `items`.
+
+**Parking Lots:**
+- `POST /parking-lots`: `{"name":"Bãi A","description":"Khu A"}` → 201, trả `{id,name,description,created_at}`.
+- `GET /parking-lots/{lot_id}` → 200 hoặc 404.
+- `PATCH /parking-lots/{lot_id}`: gửi một hoặc cả hai trường `name`, `description`; `description:null` để xóa mô tả; `name` không được rỗng/null. Trả 200 hoặc 404.
+
+**Cameras:**
+- `POST /cameras`: `{"parking_lot_id":"<uuid>","name":"CAM-01"}` → 201, trả `{id,parking_lot_id,name,reference_image_path,reference_width,reference_height,config_version}`; bãi không tồn tại → 404.
+- `GET /cameras/{camera_id}` → 200 hoặc 404.
+- `PATCH /cameras/{camera_id}`: `{ "name":"CAM-02", "expected_camera_config_version":1 }` → 200, tăng `config_version` khi đổi tên; phiên bản kỳ vọng là **tùy chọn** (để tương thích Frontend hiện tại), nhưng nên gửi để bảo vệ cập nhật đồng thời. Trùng/sai phiên bản → 409 `CAMERA_VERSION_CONFLICT`. Gửi tên giữ nguyên không tăng version.
+- Không nhận đổi `parking_lot_id`, đường dẫn ảnh hay kích thước tham chiếu trong PATCH. API riêng `PUT /cameras/{id}/reference-image` sẽ làm ở bước tiếp theo.
+
+**Validation:** Tên trim whitespace, dài 1–160; mô tả tối đa 1000 ký tự; field không hợp lệ/không cho phép → 422. UUID không hợp lệ → 422. Không có endpoint xóa thật ở W2 vì cần bảo toàn lịch sử.
+
+**Audit:** Mỗi thao tác tạo hoặc cập nhật có thay đổi đều ghi `audit_logs` cùng transaction với dữ liệu nghiệp vụ; không phải tạo migration mới vì schema đã đủ.
+
+**CORS development:** Mặc định cho phép hai React origin `http://localhost:5173` và `http://127.0.0.1:5173`. Có thể cấu hình `CORS_ORIGINS` trong `.env`; không mở wildcard ở môi trường triển khai.
