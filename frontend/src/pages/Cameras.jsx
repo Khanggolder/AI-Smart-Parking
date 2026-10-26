@@ -36,7 +36,7 @@ const columns = [
 export default function Cameras({
   role = "operator",
   demo = false,
-  demostate = "ready",
+  demoState = "ready",
 }) {
   const [lots, setLots] = useState(
     demo ? DEMO_LOTS : []
@@ -123,7 +123,7 @@ export default function Cameras({
           loadRows={loadRows}
           createItem={createCamera}
           updateItem={updateCamera}
-          demoState={demostate}
+          demoState={demoState}
         />
       )}
     </div>

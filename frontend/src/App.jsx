@@ -1,5 +1,5 @@
 
-
+import PolygonEditor from "./pages/PolygonEditor";
 import { useSearchParams } from "react-router-dom";
 
 import ParkingLots from "./pages/ParkingLots";
@@ -212,6 +212,10 @@ function App() {
             <Route
               path="/dev/cameras"
               element={<DevPreview page="cameras" />}
+            />
+            <Route
+              path="/dev/polygon-editor"
+              element={<PolygonEditor role="admin" />}
             />
           </>
         )}
