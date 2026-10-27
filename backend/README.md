@@ -2,7 +2,7 @@
 
 **W2 / Task 3.1**: FastAPI, PostgreSQL, SQLAlchemy ORM (8 entities), Alembic,
 JWT login, Admin/Operator authorization, and parking lot/camera CRUD.
-Reference-image upload, snapshots, AI integration, and public user-registration endpoints are **not implemented**.
+Snapshots, AI integration, and public user-registration endpoints are **not implemented**.
 
 ## Prerequisites and local setup (Windows CMD)
 
@@ -171,3 +171,61 @@ polygon geometry here does not yet verify its correspondence to a reference
 image. Require a camera reference image before real snapshots/inference. The
 snapshot service must copy polygon and configuration version at capture time.
 No new Alembic migration is needed.
+
+
+## W3 phase 2: camera reference images (FR-03/FR-04)
+
+This phase adds two JWT-protected routes:
+
+| Method | Path | Role | Description |
+| --- | --- | --- | --- |
+| PUT | `/cameras/{camera_id}/reference-image` | Admin | Upload and configure a camera reference frame |
+| GET | `/cameras/{camera_id}/reference-image` | Admin/Operator | Retrieve the current image as protected binary content |
+
+The **PUT** request is `multipart/form-data`, not JSON:
+
+- `image`: actual JPEG (`image/jpeg`) or PNG (`image/png`) file, mandatory.
+- `expected_camera_config_version`: current positive integer camera version, mandatory.
+
+On success, `200` returns the normal `CameraOut` with updated
+`reference_image_path` (an opaque *relative storage key*),
+`reference_width`, `reference_height` and incremented `config_version`.
+Check `GET /cameras/{id}` before submitting: every camera/polygon edit can
+increase the version. Stale versions return `409 CAMERA_VERSION_CONFLICT`.
+
+For a camera **with active parking spots**, replacing/setting the reference
+frame returns `409 ACTIVE_SPOTS_EXIST`: first deactivate affected spots and
+then upload the frame; redraw fresh polygons afterwards. This prevents silently
+reusing normalized polygons over a different frame. **Use a new camera** if you
+want to test image upload without disturbing the polygons created during W3.
+
+Upload checks MIME **and decoded content**, detects truncated images, enforces
+`UPLOAD_MAX_MB` (10 MiB by default) and a 20-million-pixel maximum. Invalid
+image → `422`; unsupported/type mismatch → `415`; oversized file → `413`.
+The original client filename is never used. The bytes are stored outside
+public static folders with random immutable filenames, under
+`REFERENCE_IMAGE_DIR` (`backend/storage/reference-images` by default).
+This directory is Git-ignored. No API permits arbitrary filesystem paths.
+GET requires Bearer authentication and serves only the image for that camera,
+with private/no-store cache headers. Do not serve the storage folder publicly.
+
+A successful upload atomically updates camera metadata/version and its audit log
+in one DB transaction; a failed DB transaction removes the new upload. An old
+reference image is intentionally **retained** following replacement; automated
+retention/garbage collection is not yet implemented. Because the DB schema
+already contains all reference-image fields, no new Alembic revision is needed.
+
+Run locally (CMD, inside `backend`):
+
+```bat
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+.venv\Scripts\python.exe -m pytest -q
+.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
+```
+
+In Swagger `/docs`, authenticate as `admin01`, find PUT under
+`camera-reference-images`, select an actual JPG/PNG file and enter the
+current version. Confirm the response metadata, then GET the same camera
+image using `operator01`. JPEG/PNG binaries may be displayed/downloaded
+by Swagger instead of printed as JSON. PostgreSQL still needs a real local
+integration check: the unit tests use disposable SQLite and temp storage.
