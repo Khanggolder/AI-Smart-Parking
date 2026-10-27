@@ -34,3 +34,5 @@ outputs/
 # Include Backend ORM source code
 !backend/app/models/
 !backend/app/models/*.py
+# Private uploaded camera/reference images
+backend/storage/
