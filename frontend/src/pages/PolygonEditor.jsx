@@ -2,6 +2,8 @@
 import { useEffect, useRef, useState } from "react";
 import { fetchCameras } from "../api/parking";
 import { fetchCameraSpots, createSpot, updateSpot, deleteSpot } from "../api/spots";
+import { fetchCameraReferenceImage, uploadCameraReferenceImage } from "../api/referenceImages";
+import { useLocation } from "react-router-dom";
 
 
 const CAMERA_ID = "CAM-01";
@@ -81,7 +83,16 @@ function isSelfIntersecting(points) {
 }
 
 
-export default function PolygonEditor({ role = "operator", demo = false }) {
+export default function PolygonEditor({
+  role = "operator",
+  demo: demoProp = false,
+}) {
+  const { pathname } = useLocation();
+
+  const demo =
+    demoProp ||
+    (import.meta.env.DEV &&
+      pathname === "/dev/polygon-editor");
   const [imageUrl, setImageUrl] = useState("");
   const [draft, setDraft] = useState([]);
   const [polygons, setPolygons] = useState([]);
@@ -99,8 +110,20 @@ export default function PolygonEditor({ role = "operator", demo = false }) {
   const [loadingSpots, setLoadingSpots] = useState(false);
   const [spotsError, setSpotsError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [loadingReference, setLoadingReference] = useState(false);
+  const [referenceError, setReferenceError] = useState("");
+  const [uploadFile, setUploadFile] = useState(null);
 
   const isAdmin = role === "admin";
+
+  const selectedCamera = cameras.find(
+    (camera) => camera.id === selectedCameraId
+  );
+  
+  const referenceImagePath =
+    selectedCamera?.reference_image_path ?? null;
+
+  const hasReferenceImage = Boolean(referenceImagePath);
 
   useEffect(() => {
     return () => {
@@ -119,8 +142,15 @@ useEffect(() => {
     .then((data) => {
       if (!active) return;
 
-      setCameras(data);
-      setSelectedCameraId(data[0]?.id || "");
+    const initialCamera =
+      data.find((camera) => camera.reference_image_path) ||
+      data[0];
+
+    setCameras(data);
+    setLoadingReference(
+      Boolean(initialCamera?.reference_image_path)
+    );
+    setSelectedCameraId(initialCamera?.id || "");
     })
     .catch((error) => {
       if (!active) return;
@@ -189,10 +219,150 @@ useEffect(() => {
 
 
 
+
+useEffect(() => {
+  if (demo || !selectedCameraId || !referenceImagePath) {
+    return;
+  }
+
+  let active = true;
+
+  fetchCameraReferenceImage(selectedCameraId)
+    .then((blob) => {
+      if (!active) return;
+
+      const url = URL.createObjectURL(blob);
+      setImageUrl(url);
+      setReferenceError("");
+    })
+    .catch((error) => {
+      if (!active) return;
+
+      setImageUrl("");
+      setReferenceError(
+        error.response?.data?.error?.message ||
+          "Không thể tải ảnh tham chiếu từ Backend."
+      );
+    })
+    .finally(() => {
+      if (active) setLoadingReference(false);
+    });
+
+  return () => {
+    active = false;
+  };
+}, [demo, selectedCameraId, referenceImagePath]);
+
+
+  
+  async function handleUploadReferenceImage() {
+    if (demo || !isAdmin || saving) return;
+
+    if (!selectedCameraId || cameraVersion === null) {
+      setMessage("Vui lòng chọn camera và tải cấu hình trước.");
+      return;
+    }
+
+    if (!uploadFile) {
+      setMessage("Vui lòng chọn ảnh JPEG hoặc PNG.");
+      return;
+    }
+
+    if (!["image/jpeg", "image/png"].includes(uploadFile.type)) {
+      setMessage("Chỉ hỗ trợ ảnh JPEG hoặc PNG.");
+      return;
+    }
+
+    if (loadingSpots || loadingReference) {
+      setMessage("Hãy chờ tải dữ liệu camera hoàn tất.");
+      return;
+    }
+
+    if (
+      polygons.length > 0 ||
+      draft.length > 0 ||
+      editingId !== null
+    ) {
+      setMessage(
+        "Camera đang có polygon hoặc thao tác chưa hoàn tất. " +
+        "Không thể thay ảnh tham chiếu."
+      );
+      return;
+    }
+
+    const confirmed = window.confirm(
+      referenceImagePath
+        ? "Thay ảnh tham chiếu hiện tại? Chỉ tiếp tục nếu ảnh mới phù hợp với cấu hình camera."
+        : "Upload ảnh này làm ảnh tham chiếu cho camera?"
+    );
+
+    if (!confirmed) return;
+
+    setSaving(true);
+    setMessage("");
+
+    try {
+      const updated = await uploadCameraReferenceImage(
+        selectedCameraId,
+        uploadFile,
+        cameraVersion
+      );
+
+      // Cập nhật thông tin camera để tự kích hoạt GET ảnh mới.
+      setCameras((current) =>
+        current.map((camera) =>
+          camera.id === updated.id ? updated : camera
+        )
+      );
+
+      setCameraVersion(updated.config_version);
+      setUploadFile(null);
+      setLoadingReference(true);
+      setReferenceError("");
+
+      setMessage(
+        "Đã upload ảnh tham chiếu thành công. " +
+        "Đang tải lại ảnh từ Backend."
+      );
+    } catch (error) {
+      const code = error.response?.data?.error?.code;
+
+      if (code === "ACTIVE_SPOTS_EXIST") {
+        setMessage(
+          "Camera đang có ô đỗ hoạt động. " +
+          "Bạn cần ngừng kích hoạt các ô đỗ trước khi thay ảnh."
+        );
+      } else if (code === "CAMERA_VERSION_CONFLICT") {
+        setMessage(
+          "Phiên bản cấu hình đã thay đổi. " +
+          "Hãy nhấn F5 rồi thử lại."
+        );
+      } else {
+        setMessage(
+          error.response?.data?.error?.message ||
+          "Không thể upload ảnh tham chiếu."
+        );
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+
+
   function handleImageChange(event) {
     const file = event.target.files?.[0];
 
     if (!file) return;
+
+    if (!demo) {
+        setMessage(
+          "Không thể thay ảnh cục bộ ở chế độ Backend. " +
+          "Hãy sử dụng chức năng Upload ảnh tham chiếu."
+        );
+        event.target.value = "";
+        return;
+      }
 
     if (!["image/jpeg", "image/png"].includes(file.type)) {
       setMessage("Chỉ hỗ trợ ảnh JPG hoặc PNG.");
@@ -208,23 +378,6 @@ useEffect(() => {
       event.target.value = "";
       return;
     }
-
-      if (!demo) {
-    if (polygons.some((item) => item.pending)) {
-      setMessage("Hãy lưu polygon đang chờ trước khi đổi ảnh.");
-      event.target.value = "";
-      return;
-    }
-
-    setImageUrl(URL.createObjectURL(file));
-    setDraft([]);
-    setEditingId(null);
-    setEditingPoints([]);
-    setMessage(
-      "Đã chọn ảnh để vẽ. Ảnh chỉ dùng để căn tọa độ, chưa upload lên Backend."
-    );
-    return;
-  }
 
     const key = getStorageKey(file);
     let savedPolygons = [];
@@ -747,7 +900,12 @@ async function saveEditPolygon() {
             disabled={loadingCameras || saving}
             onChange={(event) => {
               const cameraId = event.target.value;
+              const camera = cameras.find(
+                (item) => item.id === cameraId
+              );
 
+              setLoadingReference(Boolean(camera?.reference_image_path));
+              setReferenceError("");
               setSelectedCameraId(cameraId);
               setPolygons([]);
               setUsedSpotCodes([]);
@@ -759,6 +917,7 @@ async function saveEditPolygon() {
               setEditingPoints([]);
               setImageUrl("");
               setMessage("");
+              setUploadFile(null);
             }}
           >
             <option value="">-- Chọn camera --</option>
@@ -813,10 +972,10 @@ async function saveEditPolygon() {
       {isAdmin && demo && (
         <div className="polygon-controls">
           <label>
-            Chọn ảnh tham chiếu:
+            Chọn ảnh tham chiếu (DEV):
             <input
               type="file"
-              accept="image/*"
+              accept="image/jpeg,image/png"
               onChange={handleImageChange}
             />
           </label>
@@ -859,21 +1018,47 @@ async function saveEditPolygon() {
       )}
 
       
-    {isAdmin && !demo && (
-      <div className="polygon-controls">
-        <label>
-          Chọn ảnh để vẽ polygon:
-          <input
-            type="file"
-            accept="image/png,image/jpeg"
-            onChange={handleImageChange}
+      {isAdmin && !demo && (
+        <div className="polygon-controls">
+          <label>
+            Upload ảnh tham chiếu:
+            <input
+              key={`${selectedCameraId}:${cameraVersion}`}
+              type="file"
+              accept="image/jpeg,image/png"
+              disabled={
+                !selectedCameraId ||
+                cameraVersion === null ||
+                saving ||
+                loadingSpots ||
+                loadingReference ||
+                polygons.length > 0 ||
+                draft.length > 0 ||
+                editingId !== null
+              }
+              onChange={(event) => {
+                setUploadFile(event.target.files?.[0] ?? null);
+              }}
+            />
+          </label>
+
+          <button
+            type="button"
+            onClick={handleUploadReferenceImage}
             disabled={
+              !uploadFile ||
               !selectedCameraId ||
               cameraVersion === null ||
-              saving
+              saving ||
+              loadingSpots ||
+              loadingReference ||
+              polygons.length > 0 ||
+              draft.length > 0 ||
+              editingId !== null
             }
-          />
-        </label>
+          >
+            {saving ? "Đang upload..." : "Upload ảnh lên Backend"}
+          </button>
 
         <button
           type="button"
@@ -919,6 +1104,27 @@ async function saveEditPolygon() {
     )}
 
       {message && <p role="status">{message}</p>}
+
+      
+      {!demo && loadingReference && (
+        <p role="status">
+          Đang tải ảnh tham chiếu từ Backend...
+        </p>
+      )}
+
+      {!demo && referenceError && (
+        <p className="manager-error" role="alert">
+          {referenceError}
+        </p>
+      )}
+
+      {!demo &&
+          selectedCamera &&
+          !hasReferenceImage && (
+            <p className="manager-demo">
+              Camera này chưa có ảnh tham chiếu trên Backend.
+            </p>
+          )}
 
       {imageUrl ? (
         <div className="polygon-canvas">
@@ -1014,7 +1220,7 @@ async function saveEditPolygon() {
       ) : (
         <div className="manager-state">
           <h3>Chưa có ảnh tham chiếu</h3>
-          <p>Admin hãy chọn ảnh để bắt đầu vẽ ô đỗ.</p>
+          <p>{demo ? "Admin hãy chọn ảnh để bắt đầu vẽ ô đỗ." : "Vui lòng upload ảnh tham chiếu lên Backend trước khi vẽ."}</p>
         </div>
       )}
 
