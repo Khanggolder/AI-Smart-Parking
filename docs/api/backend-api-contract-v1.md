@@ -162,32 +162,49 @@ Giới hạn `UPLOAD_MAX_MB=10` theo `.env.example`. Không chấp nhận file c
 
 CSV phải sử dụng cùng bộ lọc để không sai số với giao diện, định dạng UTF-8; không đưa đường dẫn nội bộ hoặc secret vào CSV.
 
-## 4. Backend ↔ AI Service contract
+## 4. Backend ↔ AI Service contract (W4 hiện thực)
 
-**Endpoint nội bộ dự kiến:** `POST {AI_SERVICE_URL}/predict` (multipart gồm ảnh + JSON metadata). Chuẩn hóa tọa độ do Backend thực hiện; AI trả spot IDs không được thay đổi.
+**API thực tế**: `POST {AI_SERVICE_URL}/v1/infer`. Thay thế mô tả cũ
+`/predict`; đây không phải đổi endpoint trên AI Service. Backend gửi
+`multipart/form-data`:
 
-Metadata JSON dạng:
+- `image`: ảnh snapshot JPEG/PNG gốc (<= 10MiB theo mặc định).
+- `camera_id`: UUID camera dạng string, chỉ được service AI echo.
+- `spots_json`: chuỗi JSON array; mỗi spot dùng UUID cố định `spot_id` và
+  `polygon` là danh sách 3–50 cặp `[x, y]` normalized. Backend chuyển từ
+  danh sách các điểm `{x,y}` đã lưu trong PostgreSQL. Giữ nguyên thứ tự.
 
-```json
-{
-  "snapshot_id":"06dfd72a-f8a4-47d5-9463-9c862401fa06",
-  "camera_id":"5c9dce78-7b7e-4503-8498-523220028b6e",
-  "camera_config_version":2,
-  "spots":[{"spot_id":"c5c646c3-e985-4d3c-a12f-191b69e6b9da","polygon":[{"x":0.1,"y":0.2},{"x":0.25,"y":0.2},{"x":0.25,"y":0.4}]}]
-}
-```
+**AI trả HTTP 200** với `camera_id`, `model_version`, `threshold`,
+`processing_time_ms` và mảng `predictions`. Mỗi dự đoán có `spot_id`,
+`raw_label` (empty/occupied), `label` (empty/occupied/unknown), `confidence`,
+`scores` gồm empty/occupied. Backend kiểm tra đầy đủ, hữu hạn, nhãn đúng
+với ngưỡng, `spot_id` đủ số lượng và thứ tự. Mọi kết quả không khớp bị hủy;
+không được tự tạo `unknown` để thay lỗi mạng/model.
 
-AI trả:
+`AI_SERVICE_URL=http://127.0.0.1:8001` trong local. `/ready=200` xác nhận
+model sẵn sàng, còn `/health=200` chỉ là tiến trình sống.
+Gói bàn giao là `v0.1.0-rc2`, model version
+`mobilenetv3-small-w2-488ed38efe01`, threshold ứng viên 0.90.
+Checkpoint phải do AI service tải; Backend chỉ gọi HTTP và **không có nhãn thật**.
 
-```json
-{
-  "model_version":"baseline-v1",
-  "inference_ms":1240,
-  "predictions":[{"spot_id":"c5c646c3-e985-4d3c-a12f-191b69e6b9da","label":"occupied","confidence":0.95}]
-}
-```
+API Backend `POST /snapshots` nhận `camera_id`, `captured_at` với timezone và
+`image` trong multipart, trả `202 {id,camera_id,captured_at,
+ camera_config_version,job_status:"queued"}`. Phải có ảnh tham chiếu thật,
+1–100 spot active, snapshot cùng kích thước ảnh tham chiếu. Cấu hình polygon
+được sao chép bất biến vào `snapshots.spots_at_capture` ở thời điểm nhận ảnh.
+Một tác vụ nền thực hiện `queued -> processing -> completed/failed`.
 
-Backend kiểm tra `spot_id` thuộc camera/snapshot, không trùng, đủ số lượng; `confidence ∈ [0,1]`, nhãn hợp lệ, `model_version` không rỗng. Response thiếu/không hợp lệ → job `failed`; có thể bổ sung retry nhưng không lưu kết quả nửa vời. **Bộ dữ liệu gán nhãn không đi trong inference request.**
+`GET /snapshots/{id}` trả `error_code` khi failed; khi completed trả
+`summary`, `predictions` với spot code/polygon gốc, label/raw/scores/confidence,
+model_version và threshold. `GET /snapshots/{id}/image` trả file có JWT.
+`GET /snapshots` có filter camera/status/thời gian và phân trang.
+`effective_label` hiện bằng `predicted_label`; review append-only triển khai sau.
+
+**W4 MVP limitation:** BackgroundTasks là in-process, chưa bền qua restart;
+cần durable queue, recovery, retry giới hạn và idempotency trước production.
+`is_stale` của snapshot completed phản ánh tuổi của ảnh đó; dashboard cuối
+cùng sẽ dùng snapshot completed mới nhất của từng camera, không biến lỗi AI
+thành trạng thái `unknown`.
 
 ## 5. Error format và status code
 

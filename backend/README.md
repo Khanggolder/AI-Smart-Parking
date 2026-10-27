@@ -229,3 +229,88 @@ current version. Confirm the response metadata, then GET the same camera
 image using `operator01`. JPEG/PNG binaries may be displayed/downloaded
 by Swagger instead of printed as JSON. PostgreSQL still needs a real local
 integration check: the unit tests use disposable SQLite and temp storage.
+
+
+## W4: snapshot upload -> real AI /v1/infer -> persisted predictions
+
+Backend **does not ship model weights**. Run Khang's separately handed-over
+`ai-smart-parking-model-v0.1.0-rc2.zip` after verifying its SHA-256 and
+`verify_release.py`. AI's `/ready` must return HTTP 200, status `ready`,
+model version `mobilenetv3-small-w2-488ed38efe01` and threshold `0.9`.
+`/health=200` alone is not evidence the model loaded. In `.env` use:
+
+```ini
+AI_SERVICE_URL=http://127.0.0.1:8001
+AI_TIMEOUT_SECONDS=30
+SNAPSHOT_IMAGE_DIR=backend/storage/snapshots
+STALE_THRESHOLD_MINUTES=30
+```
+
+**Apply migration before starting W4 Backend (inside backend/):**
+
+```bat
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+.venv\Scripts\python.exe -m alembic upgrade head
+.venv\Scripts\python.exe -m alembic current
+.venv\Scripts\python.exe -m pytest -q
+.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
+```
+
+The new migration is `20261027_02_snapshot_ai_fields`; the W2 migration
+`20261025_01_initial_schema.py` is unchanged. W4 reuses the existing 8 tables.
+
+| Method | API path (under `/api/v1`) | Role | Description |
+| --- | --- | --- | --- |
+| POST | `/snapshots` | Admin/Operator | multipart `camera_id`, `captured_at` with timezone, `image` JPEG/PNG; returns `202` with UUID and `job_status=queued` |
+| GET | `/snapshots/{snapshot_id}` | Admin/Operator | Job status, AI predictions, original summary and error code |
+| GET | `/snapshots/{snapshot_id}/image` | Admin/Operator | Protected private image, not a public static URL |
+| GET | `/snapshots?camera_id=&job_status=&from=&to=&limit=&offset=` | Admin/Operator | History list |
+
+**Prerequisite:** a camera must have a valid, locally stored reference image and
+at least one active polygon. The uploaded snapshot must match reference image
+width/height to keep the normalized ROI aligned (otherwise 422). All active
+spots are frozen into `snapshots.spots_at_capture` together with the current
+camera config version *before* background inference; later polygon changes
+cannot change history. JPEG/PNG payload max is `UPLOAD_MAX_MB` (default 10MiB).
+
+The async MVP job moves `queued` -> `processing` -> `completed` / `failed`.
+AI is called over internal HTTP using `image`, `camera_id`, and `spots_json`
+(`{x,y}` -> `[x,y]`, stable spot UUID, strict ordering). The Backend validates
+camera ID, exact spot ID ordering, model version, scores, confidence, threshold,
+raw/final label consistency and inference time. All predictions and the
+completed job status are inserted in **one DB transaction**. A timeout, AI 503,
+malformed response or mismatched IDs results in a **failed** job with no fake
+`unknown` predictions. Old successful snapshots are not deleted.
+`unknown` must not be interpreted as `empty`; FULL requires every spot occupied.
+
+`GET /snapshots/{id}` has `summary` only for completed jobs. `is_stale` is `null`
+for incomplete/failed jobs; for completed snapshots it reports whether its own
+`captured_at` is past the threshold. A future dashboard should compute freshness
+of the **latest completed** snapshot for the camera, separately from failed jobs.
+`effective_label` equals the AI label until the separate review API is built.
+No frontend changes are included in this Backend PR.
+
+**Limit of this W4 MVP:** Starlette `BackgroundTasks` runs in the web process;
+it is NOT a durable queue. Stopping/reloading the process during inference may
+leave a job in `queued` or `processing`. Before production use a durable queue,
+worker restart recovery, idempotency controls, bounded retries/backoff, storage
+retention/garbage collection, and metrics. Run one Backend worker for the local
+demo. AI Service has no auth, so bind it to loopback/private network only.
+
+### Swagger end-to-end test (real model, not mock)
+
+1. Confirm `http://127.0.0.1:8001/ready` is `ready` and matches rc2.
+2. Login as Admin/Operator in `/docs`, select `POST /api/v1/snapshots`.
+3. Enter the camera UUID (with reference image and active spots),
+   `captured_at` e.g. `2026-10-27T09:00:00+07:00`, and JPEG/PNG snapshot
+   **of the same resolution as the reference image**.
+4. `202` returns a snapshot UUID; use `GET /api/v1/snapshots/{id}` to poll
+   `queued/processing/completed/failed`. Do not assume inference completes
+   within the HTTP upload response.
+5. On completion, confirm predictions, `summary`, `model_version`, and rows
+   in PostgreSQL `snapshots` + `spot_predictions`. To view the original image,
+   use protected `GET /api/v1/snapshots/{id}/image`.
+
+Pytest uses **mocked AI HTTP transport**, disposable SQLite, and temporary
+image files. A passing test suite verifies Backend integration logic but is
+**not** proof that the real checkpoint runs successfully on your PC.
