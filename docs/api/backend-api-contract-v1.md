@@ -287,3 +287,38 @@ image) remains an integration requirement and is not met by this API alone.
 `PUT /cameras/{camera_id}/reference-image` will be implemented separately before
 relying on polygon coordinates for real snapshots. AI adapter must map stored
 `{x,y}` to `[x,y]` when calling the existing `POST /v1/infer` service.
+
+
+## 10. W3 phase 2 — Camera reference-image upload and protected read
+
+- `PUT /cameras/{camera_id}/reference-image` — **Admin**, `multipart/form-data`:
+  required `image` (JPEG/PNG bytes) and required integer
+  `expected_camera_config_version` (>= 1).
+- Returns `200` `CameraOut`: `{id,parking_lot_id,name,reference_image_path,
+  reference_width,reference_height,config_version}`.
+- `GET /cameras/{camera_id}/reference-image` — **Admin/Operator**,
+  returns `200` binary `image/jpeg` or `image/png` with `private, no-store`.
+  There is no unauthenticated static URL.
+- `reference_image_path` is an opaque relative storage key, **not** an
+  absolute path or publicly accessible URL. Filenames are random. Bytes are
+  written under `REFERENCE_IMAGE_DIR` (default: `backend/storage/reference-images`)
+  and excluded from Git.
+- Files are checked for actual format, decoding, size (`UPLOAD_MAX_MB`,
+  default 10 MiB) and dimensions (max 20 million pixels).
+  Unsupported or mismatched MIME → 415; malformed/truncated image → 422;
+  excess bytes → 413.
+- The camera's `config_version` is updated via optimistic conditional UPDATE.
+  Stale version → `409 CAMERA_VERSION_CONFLICT`; upload refuses while any
+  **active** parking spots exist → `409 ACTIVE_SPOTS_EXIST`. Deactivate/reconfigure
+  old spots before replacing the frame so old polygon geometry is not silently
+  reused on a different reference image.
+- A successful upload commits camera dimensions, relative image key,
+  incremented version and audit event together. If DB commit fails, the newly
+  stored image is cleaned up; old immutable reference files remain for now.
+- Missing camera/image → 404; unauthenticated → 401; Operator PUT → 403.
+  No migration needed because `cameras` already has the three reference fields.
+
+**Boundary:** The current React `/polygon-editor` remains a placeholder;
+W3 upload/read APIs do not themselves provide the drawing UI. W4 snapshot/AI
+must still validate a camera reference frame and map `{x,y}` vertices to
+`[x,y]` for the AI service's actual `POST /v1/infer` endpoint.
