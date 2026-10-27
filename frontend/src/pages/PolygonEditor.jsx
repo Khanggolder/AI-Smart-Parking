@@ -1,5 +1,7 @@
 
 import { useEffect, useRef, useState } from "react";
+import { fetchCameras } from "../api/parking";
+import { fetchCameraSpots, createSpot, updateSpot, deleteSpot } from "../api/spots";
 
 
 const CAMERA_ID = "CAM-01";
@@ -79,15 +81,23 @@ function isSelfIntersecting(points) {
 }
 
 
-export default function PolygonEditor({ role = "operator" }) {
+export default function PolygonEditor({ role = "operator", demo = false }) {
   const [imageUrl, setImageUrl] = useState("");
   const [draft, setDraft] = useState([]);
   const [polygons, setPolygons] = useState([]);
   const [message, setMessage] = useState("");
+  const [cameras, setCameras] = useState([]);
+  const [selectedCameraId, setSelectedCameraId] = useState("");
+  const [loadingCameras, setLoadingCameras] = useState(!demo);
+  const [cameraError, setCameraError] = useState("");
   const [storageKey, setStorageKey] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [editingPoints, setEditingPoints] = useState([]);
   const draggingIndex = useRef(null);
+  const [cameraVersion, setCameraVersion] = useState(null);
+  const [loadingSpots, setLoadingSpots] = useState(false);
+  const [spotsError, setSpotsError] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const isAdmin = role === "admin";
 
@@ -96,6 +106,79 @@ export default function PolygonEditor({ role = "operator" }) {
       if (imageUrl) URL.revokeObjectURL(imageUrl);
     };
   }, [imageUrl]);
+  
+
+  
+useEffect(() => {
+  if (demo) return;
+
+  let active = true;
+
+  fetchCameras()
+    .then((data) => {
+      if (!active) return;
+
+      setCameras(data);
+      setSelectedCameraId(data[0]?.id || "");
+    })
+    .catch((error) => {
+      if (!active) return;
+
+      setCameraError(
+        error.response?.data?.error?.message ||
+          "Không thể tải camera từ Backend."
+      );
+    })
+    .finally(() => {
+      if (active) setLoadingCameras(false);
+    });
+
+  return () => {
+    active = false;
+  };
+}, [demo]);
+
+
+useEffect(() => {
+  if (demo || !selectedCameraId) return;
+
+  let active = true;
+
+  fetchCameraSpots(selectedCameraId)
+    .then((data) => {
+      if (!active) return;
+
+      if (
+        !Array.isArray(data?.items) ||
+        !Number.isInteger(data?.camera_config_version)
+      ) {
+        throw new Error(
+          "Dữ liệu polygon từ Backend không hợp lệ."
+        );
+      }
+
+      setPolygons(data.items);
+      setCameraVersion(data.camera_config_version);
+      setSpotsError("");
+    })
+    .catch((error) => {
+      if (!active) return;
+
+      setSpotsError(
+        error.response?.data?.error?.message ||
+        error.message ||
+        "Không thể tải polygon từ Backend."
+      );
+    })
+    .finally(() => {
+      if (active) setLoadingSpots(false);
+    });
+
+  return () => {
+    active = false;
+  };
+}, [demo, selectedCameraId]);
+
 
 
   function handleImageChange(event) {
@@ -117,6 +200,23 @@ export default function PolygonEditor({ role = "operator" }) {
       event.target.value = "";
       return;
     }
+
+      if (!demo) {
+    if (polygons.some((item) => item.pending)) {
+      setMessage("Hãy lưu polygon đang chờ trước khi đổi ảnh.");
+      event.target.value = "";
+      return;
+    }
+
+    setImageUrl(URL.createObjectURL(file));
+    setDraft([]);
+    setEditingId(null);
+    setEditingPoints([]);
+    setMessage(
+      "Đã chọn ảnh để vẽ. Ảnh chỉ dùng để căn tọa độ, chưa upload lên Backend."
+    );
+    return;
+  }
 
     const key = getStorageKey(file);
     let savedPolygons = [];
@@ -155,7 +255,18 @@ export default function PolygonEditor({ role = "operator" }) {
   }
 
   function handleCanvasClick(event) {
-    if (!isAdmin || !imageUrl || editingId !== null) return;
+      if (
+        !isAdmin ||
+        !imageUrl ||
+        editingId !== null ||
+        saving ||
+        (!demo &&
+          (cameraVersion === null ||
+            !selectedCameraId ||
+            polygons.some((item) => item.pending)))
+      ) {
+        return;
+      }
 
     const rect = event.currentTarget.getBoundingClientRect();
 
@@ -177,6 +288,17 @@ export default function PolygonEditor({ role = "operator" }) {
 
 
     function finishPolygon() {
+
+    if (!demo && polygons.some((item) => item.pending)) {
+      setMessage("Hãy lưu polygon trước khi tạo polygon tiếp theo.");
+      return;
+    }
+
+    if (draft.length > 50) {
+      setMessage("Polygon chỉ được có tối đa 50 đỉnh.");
+      return;
+    }
+
     if (draft.length < 3) {
         setMessage("Polygon phải có ít nhất 3 đỉnh.");
         return;
@@ -227,6 +349,7 @@ export default function PolygonEditor({ role = "operator" }) {
         id: crypto.randomUUID(),
         spot_code: `P${String(nextNumber).padStart(2, "0")}`,
         polygon: draft,
+        pending: !demo,
         },
     ]);
 
@@ -239,15 +362,81 @@ export default function PolygonEditor({ role = "operator" }) {
   }
 
   
-    function deletePolygon(id) {
-    if (!isAdmin) return;
 
+async function deletePolygon(id) {
+  if (
+    !isAdmin ||
+    saving ||
+    editingId !== null ||
+    draft.length > 0
+  ) {
+    return;
+  }
+
+  const item = polygons.find((polygon) => polygon.id === id);
+  if (!item) return;
+
+  // Chế độ DEV: giữ nguyên hành vi xóa trong trình duyệt.
+  if (demo) {
     setPolygons((current) =>
-        current.filter((item) => item.id !== id)
+      current.filter((polygon) => polygon.id !== id)
+    );
+    setMessage("Đã xóa polygon khỏi bản nháp.");
+    return;
+  }
+
+  // Chế độ Backend: chỉ xóa polygon đã lưu.
+  if (
+    item.pending ||
+    !selectedCameraId ||
+    cameraVersion === null
+  ) {
+    setMessage("Polygon chưa sẵn sàng để xóa.");
+    return;
+  }
+
+  const confirmed = window.confirm(
+    `Bạn có chắc muốn ngừng kích hoạt ${item.spot_code}?`
+  );
+
+  if (!confirmed) return;
+
+  setSaving(true);
+  setMessage("");
+
+  try {
+    await deleteSpot(id, cameraVersion);
+
+    // GET mặc định chỉ trả về các polygon đang hoạt động.
+    setPolygons((current) =>
+      current.filter((polygon) => polygon.id !== id)
     );
 
-    setMessage("Đã xóa polygon khỏi bản nháp.");
+    // Backend tăng config_version sau khi xóa thành công.
+    setCameraVersion((current) => current + 1);
+
+    setMessage(
+      `Đã ngừng kích hoạt ${item.spot_code} trong PostgreSQL.`
+    );
+  } catch (error) {
+    const code = error.response?.data?.error?.code;
+
+    if (code === "CAMERA_VERSION_CONFLICT") {
+      setMessage(
+        "Cấu hình camera đã thay đổi. " +
+        "Hãy nhấn F5 để lấy phiên bản mới nhất."
+      );
+    } else {
+      setMessage(
+        error.response?.data?.error?.message ||
+        "Không thể xóa polygon trên Backend."
+      );
     }
+  } finally {
+    setSaving(false);
+  }
+}
+
 
     function cancelDraft() {
     setDraft([]);
@@ -301,36 +490,48 @@ function moveVertex(event, index) {
   );
 }
 
-function saveEditPolygon() {
-  if (!editingId || !isAdmin) return;
+
+async function saveEditPolygon() {
+  if (!editingId || !isAdmin || saving) return;
+
+  if (
+    !demo &&
+    (!selectedCameraId || cameraVersion === null)
+  ) {
+    setMessage("Chưa tải xong cấu hình camera.");
+    return;
+  }
+
+  if (
+    editingPoints.length < 3 ||
+    editingPoints.length > 50
+  ) {
+    setMessage("Polygon phải có từ 3 đến 50 đỉnh.");
+    return;
+  }
 
   const uniquePoints = new Set(
     editingPoints.map((point) => `${point.x},${point.y}`)
   );
-
-  if (editingPoints.length < 3) {
-    setMessage("Polygon phải có ít nhất 3 đỉnh.");
-    return;
-  }
 
   if (uniquePoints.size !== editingPoints.length) {
     setMessage("Polygon có các đỉnh trùng nhau.");
     return;
   }
 
-  const area = Math.abs(
-    editingPoints.reduce((sum, point, index) => {
-      const next = editingPoints[
-        (index + 1) % editingPoints.length
-      ];
+  const area =
+    Math.abs(
+      editingPoints.reduce((sum, point, index) => {
+        const next =
+          editingPoints[(index + 1) % editingPoints.length];
 
-      return (
-        sum +
-        point.x * next.y -
-        next.x * point.y
-      );
-    }, 0)
-  ) / 2;
+        return (
+          sum +
+          point.x * next.y -
+          next.x * point.y
+        );
+      }, 0)
+    ) / 2;
 
   if (area < 0.000001) {
     setMessage("Polygon có diện tích quá nhỏ hoặc bằng 0.");
@@ -344,22 +545,135 @@ function saveEditPolygon() {
     return;
   }
 
-  setPolygons((current) =>
-    current.map((item) =>
-      item.id === editingId
-        ? {
-            ...item,
-            polygon: editingPoints.map((point) => ({ ...point })),
-          }
-        : item
-    )
+  const pointsToSave = editingPoints.map(
+    (point) => ({ ...point })
   );
 
-  setEditingId(null);
-  setEditingPoints([]);
-  draggingIndex.current = null;
-  setMessage("Đã lưu chỉnh sửa vào bản nháp.");
+  // Chế độ DEV: giữ chức năng cũ, chưa gọi API.
+  if (demo) {
+    setPolygons((current) =>
+      current.map((item) =>
+        item.id === editingId
+          ? { ...item, polygon: pointsToSave }
+          : item
+      )
+    );
+
+    setEditingId(null);
+    setEditingPoints([]);
+    draggingIndex.current = null;
+    setMessage("Đã lưu chỉnh sửa vào bản nháp.");
+    return;
+  }
+
+  // Chế độ Backend: gửi PATCH đến PostgreSQL.
+  setSaving(true);
+  setMessage("");
+
+  try {
+    const updated = await updateSpot(
+      editingId,
+      pointsToSave,
+      cameraVersion
+    );
+
+    setPolygons((current) =>
+      current.map((item) =>
+        item.id === editingId ? updated : item
+      )
+    );
+
+    setCameraVersion(updated.camera_config_version);
+
+    setEditingId(null);
+    setEditingPoints([]);
+    draggingIndex.current = null;
+
+    setMessage(
+      `Đã cập nhật ${updated.spot_code} vào PostgreSQL thành công.`
+    );
+  } catch (error) {
+    const code = error.response?.data?.error?.code;
+
+    if (code === "CAMERA_VERSION_CONFLICT") {
+      setMessage(
+        "Cấu hình camera đã thay đổi trên Backend. " +
+        "Vui lòng tải lại trang trước khi chỉnh sửa tiếp."
+      );
+    } else {
+      setMessage(
+        error.response?.data?.error?.message ||
+        "Không thể cập nhật polygon lên PostgreSQL."
+      );
+    }
+  } finally {
+    setSaving(false);
+  }
 }
+
+
+
+  async function savePendingPolygon() {
+    if (!isAdmin || demo || saving) return;
+
+    if (!selectedCameraId || cameraVersion === null) {
+      setMessage("Chưa chọn camera hoặc chưa tải xong cấu hình.");
+      return;
+    }
+
+    if (draft.length > 0 || editingId !== null) {
+      setMessage("Hãy hoàn thành hoặc hủy thao tác đang thực hiện.");
+      return;
+    }
+
+    const pending = polygons.filter((item) => item.pending);
+
+    if (pending.length !== 1) {
+      setMessage("Hãy hoàn thành một polygon trước khi lưu.");
+      return;
+    }
+
+    const item = pending[0];
+
+    setSaving(true);
+    setMessage("");
+
+    try {
+      const saved = await createSpot(
+        selectedCameraId,
+        item.spot_code,
+        item.polygon,
+        cameraVersion
+      );
+
+      setPolygons((current) =>
+        current.map((polygon) =>
+          polygon.id === item.id ? saved : polygon
+        )
+      );
+
+      setCameraVersion(saved.camera_config_version);
+
+      setMessage(
+        `Đã lưu ${saved.spot_code} vào PostgreSQL thành công.`
+      );
+    } catch (error) {
+      if (error.response?.status === 409) {
+        setMessage(
+          "Xung đột dữ liệu hoặc mã ô đỗ đã tồn tại. " +
+          "Kiểm tra thông báo API và tải lại cấu hình nếu phiên bản đã thay đổi."
+        );
+      } else {
+        setMessage(
+          error.response?.data?.error?.message ||
+            "Không thể lưu polygon lên PostgreSQL."
+        );
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
   
   function savePolygons() {
     if (!isAdmin || !storageKey) {
@@ -398,17 +712,83 @@ function saveEditPolygon() {
   return (
     <section className="content-card polygon-editor">
       <h2>Polygon Editor</h2>
+      
+      {!demo && (
+        <div className="polygon-controls">
+          <label htmlFor="polygon-camera">
+            Chọn camera từ PostgreSQL:
+          </label>
+
+          <select
+            id="polygon-camera"
+            className="manager-select"
+            value={selectedCameraId}
+            disabled={loadingCameras || saving}
+            onChange={(event) => {
+              const cameraId = event.target.value;
+
+              setSelectedCameraId(cameraId);
+              setPolygons([]);
+              setCameraVersion(null);
+              setSpotsError("");
+              setLoadingSpots(Boolean(cameraId));
+              setDraft([]);
+              setEditingId(null);
+              setEditingPoints([]);
+              setImageUrl("");
+              setMessage("");
+            }}
+          >
+            <option value="">-- Chọn camera --</option>
+
+            {cameras.map((camera) => (
+              <option key={camera.id} value={camera.id}>
+                {camera.name}
+              </option>
+            ))}
+          </select>
+
+          {loadingCameras && <p>Đang tải camera...</p>}
+
+          {cameraError && (
+            <p className="manager-error" role="alert">
+              {cameraError}
+            </p>
+          )}
+
+          {!loadingCameras &&
+            !cameraError &&
+            cameras.length === 0 && (
+              <p>Chưa có camera trong PostgreSQL.</p>
+            )}
+
+          {selectedCameraId && (
+            <p>
+              Camera UUID: <code>{selectedCameraId}</code>
+            </p>
+          )}
+        </div>
+      )}
+
 
       <p>
-        Camera: CAM-01 · Ảnh tham chiếu ·
-        {isAdmin ? " Admin" : " Operator"}
+        Camera:{" "}
+        {demo
+          ? "CAM-01"
+          : cameras.find(
+              (camera) => camera.id === selectedCameraId
+            )?.name || "Chưa chọn camera"}
+        {" · "}
+        {isAdmin ? "Admin" : "Operator"}
       </p>
 
       <p className="manager-demo">
-        W3 Preview: Polygon chưa được lưu lên Backend.
+        {demo
+          ? "Chế độ DEV: Polygon lưu bằng localStorage."
+          : "Chế độ Backend: Danh sách polygon tải từ PostgreSQL. Chưa hỗ trợ ghi tại bước này."}
       </p>
 
-      {isAdmin && (
+      {isAdmin && demo && (
         <div className="polygon-controls">
           <label>
             Chọn ảnh tham chiếu:
@@ -455,6 +835,66 @@ function saveEditPolygon() {
 
         </div>
       )}
+
+      
+    {isAdmin && !demo && (
+      <div className="polygon-controls">
+        <label>
+          Chọn ảnh để vẽ polygon:
+          <input
+            type="file"
+            accept="image/png,image/jpeg"
+            onChange={handleImageChange}
+            disabled={
+              !selectedCameraId ||
+              cameraVersion === null ||
+              saving
+            }
+          />
+        </label>
+
+        <button
+          type="button"
+          onClick={undoPoint}
+          disabled={draft.length === 0 || saving}
+        >
+          Hoàn tác điểm
+        </button>
+
+        <button
+          type="button"
+          onClick={cancelDraft}
+          disabled={draft.length === 0 || saving}
+        >
+          Hủy polygon đang vẽ
+        </button>
+
+        <button
+          type="button"
+          onClick={finishPolygon}
+          disabled={
+            !imageUrl ||
+            saving ||
+            polygons.some((item) => item.pending)
+          }
+        >
+          Hoàn thành polygon
+        </button>
+
+        <button
+          type="button"
+          className="polygon-save-button"
+          onClick={savePendingPolygon}
+          disabled={
+            saving ||
+            draft.length > 0 ||
+            !polygons.some((item) => item.pending)
+          }
+        >
+          {saving ? "Đang lưu..." : "Lưu lên PostgreSQL"}
+        </button>
+      </div>
+    )}
 
       {message && <p role="status">{message}</p>}
 
@@ -556,7 +996,23 @@ function saveEditPolygon() {
         </div>
       )}
 
+      {!demo && (
+  <>
+    {cameraVersion !== null && (
+      <p>Camera config version: {cameraVersion}</p>
+    )}
+
+    {loadingSpots && <p>Đang tải polygon...</p>}
+
+    {spotsError && (
+      <p className="manager-error" role="alert">
+        {spotsError}
+      </p>
+    )}
+  </>
+)}
       <h3>Danh sách polygon ({polygons.length})</h3>
+
 
 
 
@@ -565,48 +1021,69 @@ function saveEditPolygon() {
           <button
             type="button"
             onClick={saveEditPolygon}
+            disabled={saving}
           >
-            Lưu chỉnh sửa
+            {saving
+              ? "Đang cập nhật..."
+              : demo
+                ? "Lưu chỉnh sửa"
+                : "Lưu chỉnh sửa lên PostgreSQL"}
           </button>
 
           <button
             type="button"
             onClick={cancelEditPolygon}
+            disabled={saving}
           >
             Hủy chỉnh sửa
           </button>
         </div>
       )}
 
+
       {polygons.map((item) => (
         <div key={item.id} className="polygon-list-item">
           <span>
             {item.spot_code}: {item.polygon.length} đỉnh
+            {item.pending ? " . Chưa lưu" : ""}
           </span>
+
 
           {isAdmin && (
             <div className="polygon-list-actions">
               <button
                 type="button"
                 onClick={() => startEditPolygon(item)}
-                disabled={editingId !== null}
+                disabled={
+                  saving ||
+                  editingId !== null ||
+                  draft.length > 0 ||
+                  polygons.some((polygon) => polygon.pending)
+                }
                 className="polygon-edit-button"
               >
                 Sửa
               </button>
 
+
               <button
                 type="button"
                 onClick={() => deletePolygon(item.id)}
-                disabled={editingId !== null}
+                disabled={
+                  saving ||
+                  editingId !== null ||
+                  draft.length > 0 ||
+                  (!demo &&
+                    (cameraVersion === null || item.pending))
+                }
               >
-                Xóa
+                {demo ? "Xóa" : "Ngừng kích hoạt"}
               </button>
+
             </div>
           )}
         </div>
       ))}
-
 
     </section>
   );
