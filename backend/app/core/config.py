@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     jwt_expire_minutes: int = 60
     upload_max_mb: int = 10
     reference_image_dir: str = "backend/storage/reference-images"
+    snapshot_image_dir: str = "backend/storage/snapshots"
+    ai_service_url: str = "http://127.0.0.1:8001"
+    ai_timeout_seconds: float = 30.0
+    stale_threshold_minutes: int = 30
     # Comma-separated trusted local React origins; no wildcard in dev.
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
@@ -32,6 +36,11 @@ class Settings(BaseSettings):
     @property
     def reference_image_root(self) -> Path:
         path = Path(self.reference_image_dir)
+        return (path if path.is_absolute() else REPOSITORY_ROOT / path).resolve()
+
+    @property
+    def snapshot_image_root(self) -> Path:
+        path = Path(self.snapshot_image_dir)
         return (path if path.is_absolute() else REPOSITORY_ROOT / path).resolve()
 
     @property
