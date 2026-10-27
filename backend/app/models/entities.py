@@ -105,6 +105,11 @@ class Snapshot(Base):
     camera_config_version: Mapped[int] = mapped_column(Integer, nullable=False)
     job_status: Mapped[str] = mapped_column(String(20), nullable=False, server_default=text("'queued'"))
     error_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # Freeze the camera spot set at upload time, independent of later configuration edits.
+    spots_at_capture: Mapped[list[dict] | None] = mapped_column(PolygonJSON, nullable=True)
+    ai_model_version: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    ai_threshold: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ai_processing_time_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
 class SpotPrediction(Base):
@@ -130,6 +135,9 @@ class SpotPrediction(Base):
     predicted_label: Mapped[str] = mapped_column(String(20), nullable=False)
     confidence: Mapped[float] = mapped_column(Float, nullable=False)
     model_version: Mapped[str] = mapped_column(String(100), nullable=False)
+    raw_label: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    scores: Mapped[dict[str, float] | None] = mapped_column(PolygonJSON, nullable=True)
+    threshold: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
 class SpotReview(Base):
