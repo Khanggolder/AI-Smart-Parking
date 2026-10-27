@@ -85,6 +85,7 @@ export default function PolygonEditor({ role = "operator", demo = false }) {
   const [imageUrl, setImageUrl] = useState("");
   const [draft, setDraft] = useState([]);
   const [polygons, setPolygons] = useState([]);
+  const [usedSpotCodes, setUsedSpotCodes] = useState([]);
   const [message, setMessage] = useState("");
   const [cameras, setCameras] = useState([]);
   const [selectedCameraId, setSelectedCameraId] = useState("");
@@ -144,7 +145,7 @@ useEffect(() => {
 
   let active = true;
 
-  fetchCameraSpots(selectedCameraId)
+  fetchCameraSpots(selectedCameraId, true)
     .then((data) => {
       if (!active) return;
 
@@ -157,7 +158,14 @@ useEffect(() => {
         );
       }
 
-      setPolygons(data.items);
+      setUsedSpotCodes(
+        data.items.map((item) => item.spot_code)
+      );
+
+      setPolygons(
+        data.items.filter((item) => item.is_active)
+      );
+
       setCameraVersion(data.camera_config_version);
       setSpotsError("");
     })
@@ -332,16 +340,26 @@ useEffect(() => {
         return;
     }
 
+
+    const allCodes = [
+      ...usedSpotCodes,
+      ...polygons.map((item) => item.spot_code),
+    ];
+
     const nextNumber =
       Math.max(
         0,
-        ...polygons.map((item) => {
-          const number = Number(
-            item.spot_code.replace(/^P/, "")
-          );
-          return Number.isFinite(number) ? number : 0;
+        ...allCodes.map((code) => {
+          if (!/^P\d+$/.test(code)) return 0;
+
+          const number = Number(code.slice(1));
+
+          return Number.isSafeInteger(number)
+            ? number
+            : 0;
         })
       ) + 1;
+
 
     setPolygons((current) => [
         ...current,
@@ -653,6 +671,9 @@ async function saveEditPolygon() {
       );
 
       setCameraVersion(saved.camera_config_version);
+      setUsedSpotCodes((current) => [
+        ...new Set([...current, saved.spot_code]),
+      ]);
 
       setMessage(
         `Đã lưu ${saved.spot_code} vào PostgreSQL thành công.`
@@ -729,6 +750,7 @@ async function saveEditPolygon() {
 
               setSelectedCameraId(cameraId);
               setPolygons([]);
+              setUsedSpotCodes([]);
               setCameraVersion(null);
               setSpotsError("");
               setLoadingSpots(Boolean(cameraId));
@@ -785,7 +807,7 @@ async function saveEditPolygon() {
       <p className="manager-demo">
         {demo
           ? "Chế độ DEV: Polygon lưu bằng localStorage."
-          : "Chế độ Backend: Danh sách polygon tải từ PostgreSQL. Chưa hỗ trợ ghi tại bước này."}
+          : "Chế độ Backend: Polygon được tải và lưu trực tiếp vào PostgreSQL."}
       </p>
 
       {isAdmin && demo && (
