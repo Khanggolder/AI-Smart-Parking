@@ -692,6 +692,45 @@
   height: auto;
 }
 
+.polygon-label {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  padding: 3px 6px;
+  border: 1px solid white;
+  border-radius: 4px;
+  background: #0f172a;
+  color: white;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.polygon-label-selected {
+  background: #1d4ed8;
+}
+
+.polygon-list-item-selected {
+  background: #eff6ff;
+  border-color: #2563eb;
+}
+
+.polygon-select-button {
+  padding: 5px;
+  border: 0;
+  background: transparent;
+  color: #0f172a;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.polygon-select-button:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
 .polygon-overlay {
   position: absolute;
   inset: 0;

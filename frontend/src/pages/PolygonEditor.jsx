@@ -104,6 +104,7 @@ export default function PolygonEditor({
   const [cameraError, setCameraError] = useState("");
   const [storageKey, setStorageKey] = useState("");
   const [editingId, setEditingId] = useState(null);
+  const [selectedPolygonId, setSelectedPolygonId] = useState(null);
   const [editingPoints, setEditingPoints] = useState([]);
   const draggingIndex = useRef(null);
   const [cameraVersion, setCameraVersion] = useState(null);
@@ -618,6 +619,7 @@ async function deletePolygon(id) {
 function startEditPolygon(item) {
   if (!isAdmin) return;
 
+  setSelectedPolygonId(item.id);
   setDraft([]);
   setEditingId(item.id);
   setEditingPoints(item.polygon.map((point) => ({ ...point })));
@@ -914,6 +916,7 @@ async function saveEditPolygon() {
               setLoadingSpots(Boolean(cameraId));
               setDraft([]);
               setEditingId(null);
+              setSelectedPolygonId(null);
               setEditingPoints([]);
               setImageUrl("");
               setMessage("");
@@ -1158,10 +1161,15 @@ async function saveEditPolygon() {
             stroke={
               item.id === editingId
                 ? "#f59e0b"
-                : "#22c55e"
+                : item.id === selectedPolygonId ? "#2563eb" : "#22c55e"
             }
-            strokeWidth="4"
+            strokeWidth={item.id === selectedPolygonId ? "6" : "4"}
             vectorEffect="non-scaling-stroke"
+            onClick={(event) => {
+              if (draft.length || editingId !== null) return;
+              event.stopPropagation();
+              setSelectedPolygonId(item.id);
+            }}
           />
         ))}
 
@@ -1216,6 +1224,13 @@ async function saveEditPolygon() {
               />
             ))}
           </svg>
+          {polygons.map((item) => {
+            const points = item.id === editingId ? editingPoints : item.polygon;
+            if (!points.length) return null;
+            const x = Math.min(96, Math.max(4, points.reduce((sum, p) => sum + p.x, 0) / points.length * 100));
+            const y = Math.min(96, Math.max(4, points.reduce((sum, p) => sum + p.y, 0) / points.length * 100));
+            return <span key={item.id} className={`polygon-label${item.id === selectedPolygonId ? " polygon-label-selected" : ""}`} style={{ left: `${x}%`, top: `${y}%` }}>{item.spot_code}</span>;
+          })}
         </div>
       ) : (
         <div className="manager-state">
@@ -1270,11 +1285,11 @@ async function saveEditPolygon() {
 
 
       {polygons.map((item) => (
-        <div key={item.id} className="polygon-list-item">
-          <span>
+        <div key={item.id} className={`polygon-list-item${item.id === selectedPolygonId ? " polygon-list-item-selected" : ""}`}>
+          <button type="button" className="polygon-select-button" aria-pressed={item.id === selectedPolygonId} onClick={() => setSelectedPolygonId(item.id)}>
             {item.spot_code}: {item.polygon.length} đỉnh
             {item.pending ? " . Chưa lưu" : ""}
-          </span>
+          </button>
 
 
           {isAdmin && (

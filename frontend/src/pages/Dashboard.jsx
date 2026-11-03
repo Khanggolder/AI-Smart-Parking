@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import StatCard from "../components/StatCard";
+import SpotLabels from "../components/SpotLabels";
 import { fetchCameras } from "../api/parking";
 import { getSnapshot, getSnapshotImage, listCompletedSnapshots, submitSnapshot } from "../api/snapshots";
 
@@ -54,6 +55,7 @@ function SnapshotImage({ snapshot }) {
             stroke={colors[spot.effective_label] || colors.unknown} strokeWidth="0.004" />
         ))}
       </svg>
+      <SpotLabels spots={snapshot.predictions} />
     </div>
   );
 }

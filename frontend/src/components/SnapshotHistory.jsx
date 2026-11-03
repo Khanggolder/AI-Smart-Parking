@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { fetchCameras } from "../api/parking";
 import { getSnapshot, getSnapshotImage, listSnapshots } from "../api/snapshots";
+import SpotLabels from "./SpotLabels";
 
 const PAGE_SIZE = 20;
 const jobNames = { queued: "Đang chờ", processing: "Đang xử lý", completed: "Hoàn thành", failed: "Thất bại" };
@@ -80,6 +81,7 @@ function SnapshotDetail({ id, cameraNames, report }) {
       <svg viewBox="0 0 1 1" preserveAspectRatio="none" aria-hidden="true">
         {snapshot.predictions.map((spot) => <polygon key={spot.id} points={spot.polygon.map((p) => `${p.x},${p.y}`).join(" ")} fill={colors[spot.effective_label] || colors.unknown} fillOpacity="0.4" stroke={colors[spot.effective_label] || colors.unknown} strokeWidth="0.004" />)}
       </svg>
+      <SpotLabels spots={snapshot.predictions} />
     </div>}
     {summary && <>
       <p>Nhãn bên dưới là dự đoán AI; chức năng xác minh chưa được backend hỗ trợ.</p>
