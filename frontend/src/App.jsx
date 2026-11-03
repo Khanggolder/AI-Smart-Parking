@@ -215,7 +215,7 @@ function App() {
             />
             <Route
               path="/dev/polygon-editor"
-              element={<PolygonEditor role="admin" />}
+              element={<PolygonEditor role="admin" demo={true} />}
             />
           </>
         )}
