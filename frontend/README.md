@@ -24,7 +24,9 @@ Phụ trách: Nguyễn Hoàng Minh Khôi (Frontend / DevOps).
   kết quả dự đoán, KPI và trạng thái dữ liệu từ Backend W4.
 - Wireframe, ESLint, Vite build và GitHub Actions CI.
 
-Lịch sử, xác minh kết quả và báo cáo vẫn đang phát triển.
+Lịch sử hỗ trợ lọc snapshot theo camera, ngày và trạng thái xử lý;
+báo cáo hiển thị chi tiết và xuất CSV cho từng snapshot hoàn thành.
+Xác minh và sửa nhãn đang chờ API backend.
 Dashboard cần Backend W4, database đã migration và AI Service đã nạp model;
 cần kiểm thử toàn bộ luồng với môi trường và model thực tế.
 

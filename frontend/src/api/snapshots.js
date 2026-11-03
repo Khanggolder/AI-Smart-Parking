@@ -19,6 +19,11 @@ export async function listCompletedSnapshots(cameraId) {
   return data.items;
 }
 
+export async function listSnapshots(params) {
+  const { data } = await api.get("/snapshots", config({ params }));
+  return data;
+}
+
 export async function getSnapshot(id) {
   const { data } = await api.get(`/snapshots/${id}`, config());
   return data;
