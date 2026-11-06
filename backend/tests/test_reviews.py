@@ -340,3 +340,144 @@ def test_w5_history_auth_not_found_and_accept_restores_ai_label(context):
     assert body["summary"]["status"] == "AVAILABLE"
     assert [x["action"] for x in client.get(url, headers=admin).json()] == ["correct", "accept"]
 
+# W5 6.1.4: RBAC, invalid labels and optimistic concurrency tests.
+
+def test_w5_614_operator_admin_access_and_audit(context):
+    client, admin, operator, prediction_id, factory = context
+    url = f"/api/v1/predictions/{prediction_id}/reviews"
+    assert client.get(url).status_code == 401
+    assert client.post(url, json={"action": "accept", "expected_revision": 0}).status_code == 401
+
+    first = client.post(url, headers=operator, json={"action": "accept", "expected_revision": 0})
+    assert first.status_code == 201, first.text
+    second = client.post(url, headers=admin, json={
+        "action": "correct", "expected_revision": 1,
+        "verified_label": "occupied", "reason": "Checked by administrator",
+    })
+    assert second.status_code == 201, second.text
+
+    with factory() as db:
+        operator_id = db.scalar(select(User.id).where(User.username == "w5_operator"))
+        admin_id = db.scalar(select(User.id).where(User.username == "w5_admin"))
+        rows = db.scalars(select(SpotReview).where(
+            SpotReview.spot_prediction_id == prediction_id
+        ).order_by(SpotReview.revision)).all()
+        assert [r.reviewer_id for r in rows] == [operator_id, admin_id]
+        actions = db.scalars(select(AuditLog.action).order_by(AuditLog.created_at)).all()
+        assert "prediction.review.accept" in actions
+        assert "prediction.review.correct" in actions
+
+
+def test_w5_614_deactivated_operator_cannot_review(context):
+    client, admin, operator, prediction_id, factory = context
+    url = f"/api/v1/predictions/{prediction_id}/reviews"
+    with factory() as db:
+        user = db.scalar(select(User).where(User.username == "w5_operator"))
+        user.is_active = False
+        db.commit()
+    assert client.get(url, headers=operator).status_code == 401
+    assert client.post(url, headers=operator, json={
+        "action": "accept", "expected_revision": 0,
+    }).status_code == 401
+    assert client.get(url, headers=admin).status_code == 200
+    with factory() as db:
+        assert db.scalar(select(func.count()).select_from(SpotReview)) == 0
+
+
+@pytest.mark.parametrize("payload", [
+    {"action": "accept", "expected_revision": 0, "verified_label": "empty"},
+    {"action": "correct", "expected_revision": 0, "verified_label": "occupied"},
+    {"action": "correct", "expected_revision": 0, "verified_label": "occupied", "reason": "   "},
+    {"action": "correct", "expected_revision": 0, "verified_label": "car", "reason": "invalid label"},
+    {"action": "reject", "expected_revision": 0},
+    {"action": "accept", "expected_revision": -1},
+    {"action": "accept"},
+    {"action": "accept", "expected_revision": 0, "unexpected": "extra"},
+])
+def test_w5_614_invalid_requests_do_not_write(context, payload):
+    client, admin, _, prediction_id, factory = context
+    result = client.post(f"/api/v1/predictions/{prediction_id}/reviews", headers=admin, json=payload)
+    assert result.status_code == 422, result.text
+    with factory() as db:
+        assert db.scalar(select(func.count()).select_from(SpotReview)) == 0
+        assert db.scalar(select(func.count()).select_from(AuditLog)) == 0
+
+
+def test_w5_614_correct_same_as_original_ai_label_rejected(context):
+    client, admin, _, prediction_id, factory = context
+    result = client.post(f"/api/v1/predictions/{prediction_id}/reviews", headers=admin, json={
+        "action": "correct", "expected_revision": 0,
+        "verified_label": "empty", "reason": "Should use accept",
+    })
+    assert result.status_code == 422, result.text
+    assert result.json()["error"]["code"] == "UNCHANGED_LABEL"
+    with factory() as db:
+        assert db.scalar(select(func.count()).select_from(SpotReview)) == 0
+
+
+def test_w5_614_two_reviewers_stale_revision_and_retry(context):
+    # Simulates two reviewers who opened the same prediction at revision 0.
+    # This is a stale-write regression test, not a simultaneous PostgreSQL race.
+    client, admin, operator, prediction_id, factory = context
+    url = f"/api/v1/predictions/{prediction_id}/reviews"
+    first = client.post(url, headers=admin, json={"action": "accept", "expected_revision": 0})
+    assert first.status_code == 201, first.text
+    stale = client.post(url, headers=operator, json={
+        "action": "correct", "expected_revision": 0,
+        "verified_label": "occupied", "reason": "Stale reviewer",
+    })
+    assert stale.status_code == 409, stale.text
+    assert stale.json()["error"]["code"] == "REVIEW_VERSION_CONFLICT"
+    with factory() as db:
+        assert db.scalar(select(func.count()).select_from(SpotReview)) == 1
+        assert db.scalar(select(func.count()).select_from(AuditLog)) == 1
+
+    retried = client.post(url, headers=operator, json={
+        "action": "correct", "expected_revision": 1,
+        "verified_label": "occupied", "reason": "After refreshing revision",
+    })
+    assert retried.status_code == 201, retried.text
+    assert retried.json()["revision"] == 2
+    with factory() as db:
+        assert db.get(SpotPrediction, prediction_id).predicted_label == "empty"
+        revisions = db.scalars(select(SpotReview.revision).where(
+            SpotReview.spot_prediction_id == prediction_id
+        ).order_by(SpotReview.revision)).all()
+        assert revisions == [1, 2]
+
+
+def test_w5_614_processing_snapshot_cannot_be_reviewed(context):
+    client, admin, _, prediction_id, factory = context
+    with factory() as db:
+        pred = db.get(SpotPrediction, prediction_id)
+        snap = db.get(Snapshot, pred.snapshot_id)
+        snap.job_status = "processing"
+        db.commit()
+    result = client.post(f"/api/v1/predictions/{prediction_id}/reviews", headers=admin, json={
+        "action": "accept", "expected_revision": 0,
+    })
+    assert result.status_code == 409, result.text
+    assert result.json()["error"]["code"] == "SNAPSHOT_NOT_COMPLETED"
+    with factory() as db:
+        assert db.scalar(select(func.count()).select_from(SpotReview)) == 0
+
+
+def test_w5_614_unknown_correction_effective_label(context):
+    client, admin, _, prediction_id, factory = context
+    url = f"/api/v1/predictions/{prediction_id}/reviews"
+    corrected = client.post(url, headers=admin, json={
+        "action": "correct", "expected_revision": 0,
+        "verified_label": "unknown", "reason": "Unable to verify occupancy",
+    })
+    assert corrected.status_code == 201, corrected.text
+    with factory() as db:
+        snapshot_id = db.get(SpotPrediction, prediction_id).snapshot_id
+    snapshot_response = client.get(f"/api/v1/snapshots/{snapshot_id}", headers=admin)
+    assert snapshot_response.status_code == 200, snapshot_response.text
+    body = snapshot_response.json()
+    assert body["predictions"][0]["predicted_label"] == "empty"
+    assert body["predictions"][0]["effective_label"] == "unknown"
+    assert body["summary"]["unknown"] == 1
+    assert body["summary"]["status"] == "UNDETERMINED"
+    assert body["summary"]["full"] is False
+
