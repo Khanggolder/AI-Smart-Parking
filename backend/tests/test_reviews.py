@@ -259,3 +259,84 @@ def test_validation_and_auth(context):
         json={"action": "accept", "expected_revision": 0},
     )
     assert allowed.status_code == 201
+
+# W5 6.1.3: Review history and derived effective labels.
+def test_w5_review_history_and_effective_label(context):
+    client, admin, operator, prediction_id, factory = context
+    url = f"/api/v1/predictions/{prediction_id}/reviews"
+
+    empty = client.get(url, headers=operator)
+    assert empty.status_code == 200, empty.text
+    assert empty.json() == []
+
+    accepted = client.post(
+        url, headers=admin,
+        json={"action": "accept", "expected_revision": 0},
+    )
+    assert accepted.status_code == 201, accepted.text
+
+    corrected = client.post(
+        url, headers=operator,
+        json={
+            "action": "correct", "expected_revision": 1,
+            "verified_label": "occupied", "reason": "W5 correction test",
+        },
+    )
+    assert corrected.status_code == 201, corrected.text
+
+    history = client.get(url, headers=operator)
+    assert history.status_code == 200, history.text
+    items = history.json()
+    assert len(items) == 2
+    assert [r["revision"] for r in items] == [1, 2]
+    assert [r["action"] for r in items] == ["accept", "correct"]
+    assert [r["verified_label"] for r in items] == ["empty", "occupied"]
+    assert all(r["reviewer_id"] and r["changed_at"] for r in items)
+
+    with factory() as db:
+        snapshot_id = db.get(SpotPrediction, prediction_id).snapshot_id
+
+    response = client.get(f"/api/v1/snapshots/{snapshot_id}", headers=operator)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["job_status"] == "completed"
+    assert len(body["predictions"]) == 1
+    assert body["predictions"][0]["predicted_label"] == "empty"
+    assert body["predictions"][0]["effective_label"] == "occupied"
+    assert body["summary"]["occupied"] == 1
+    assert body["summary"]["empty"] == 0
+    assert body["summary"]["occupancy_rate"] == 100.0
+    assert body["summary"]["status"] == "FULL"
+
+
+def test_w5_history_auth_not_found_and_accept_restores_ai_label(context):
+    client, admin, operator, prediction_id, factory = context
+    url = f"/api/v1/predictions/{prediction_id}/reviews"
+    assert client.get(url).status_code == 401
+    missing = client.get(f"/api/v1/predictions/{__import__('uuid').uuid4()}/reviews", headers=operator)
+    assert missing.status_code == 404
+
+    first = client.post(
+        url, headers=admin,
+        json={
+            "action": "correct", "expected_revision": 0,
+            "verified_label": "occupied", "reason": "Test initial correction",
+        },
+    )
+    assert first.status_code == 201, first.text
+    second = client.post(
+        url, headers=admin,
+        json={"action": "accept", "expected_revision": 1},
+    )
+    assert second.status_code == 201, second.text
+    assert second.json()["verified_label"] == "empty"
+    assert second.json()["revision"] == 2
+
+    with factory() as db:
+        snapshot_id = db.get(SpotPrediction, prediction_id).snapshot_id
+    body = client.get(f"/api/v1/snapshots/{snapshot_id}", headers=operator).json()
+    assert body["predictions"][0]["predicted_label"] == "empty"
+    assert body["predictions"][0]["effective_label"] == "empty"
+    assert body["summary"]["status"] == "AVAILABLE"
+    assert [x["action"] for x in client.get(url, headers=admin).json()] == ["correct", "accept"]
+

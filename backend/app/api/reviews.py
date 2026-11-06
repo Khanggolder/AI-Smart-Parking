@@ -114,3 +114,45 @@ def create_review(
         reason=review.reason,
         changed_at=review.changed_at,
     )
+
+@router.get(
+    "/predictions/{prediction_id}/reviews",
+    response_model=list[ReviewOut],
+)
+def list_prediction_reviews(
+    prediction_id: UUID,
+    _user: User = Depends(reviewer),
+    db: Session = Depends(get_db),
+):
+    prediction = db.get(SpotPrediction, prediction_id)
+
+    if prediction is None:
+        raise APIError(
+            404,
+            "PREDICTION_NOT_FOUND",
+            "Prediction not found",
+        )
+
+    reviews = db.scalars(
+        select(SpotReview)
+        .where(SpotReview.spot_prediction_id == prediction_id)
+        .order_by(SpotReview.revision.asc())
+    ).all()
+
+    return [
+        ReviewOut(
+            id=review.id,
+            prediction_id=prediction_id,
+            reviewer_id=review.reviewer_id,
+            action=(
+                "accept"
+                if review.verified_label == prediction.predicted_label
+                else "correct"
+            ),
+            verified_label=review.verified_label,
+            revision=review.revision,
+            reason=review.reason,
+            changed_at=review.changed_at,
+        )
+        for review in reviews
+    ]
