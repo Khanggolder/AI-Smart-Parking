@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { fetchCameras } from "../api/parking";
 import { getSnapshot, getSnapshotImage, listSnapshots } from "../api/snapshots";
 import SpotLabels from "./SpotLabels";
+import PredictionReview from "./PredictionReview";
 
 const PAGE_SIZE = 20;
 const jobNames = { queued: "Đang chờ", processing: "Đang xử lý", completed: "Hoàn thành", failed: "Thất bại" };
@@ -24,12 +25,12 @@ function csvCell(value) {
 
 function downloadCsv(snapshot, cameraName) {
   const rows = [
-    ["Snapshot ID", "Camera", "Thời gian chụp (UTC)", "Tổng ô", "Ô trống", "Ô có xe", "Ô chưa xác định", "Tỷ lệ sử dụng (%)", "Mã ô", "Dự đoán AI", "Confidence", "Model"],
+    ["Snapshot ID", "Camera", "Thời gian chụp (UTC)", "Tổng ô", "Ô trống", "Ô có xe", "Ô chưa xác định", "Tỷ lệ sử dụng (%)", "Mã ô", "Dự đoán AI", "Nhãn hiện tại", "Confidence", "Model"],
     ...snapshot.predictions.map((spot) => [
       snapshot.id, cameraName, snapshot.captured_at, snapshot.summary.total,
       snapshot.summary.empty, snapshot.summary.occupied, snapshot.summary.unknown,
       snapshot.summary.occupancy_rate, spot.spot_code,
-      spot.predicted_label, spot.confidence, spot.model_version,
+      spot.predicted_label, spot.effective_label, spot.confidence, spot.model_version,
     ]),
   ];
   const blob = new Blob(["\uFEFF" + rows.map((row) => row.map(csvCell).join(",")).join("\r\n")], { type: "text/csv;charset=utf-8" });
@@ -44,6 +45,7 @@ function downloadCsv(snapshot, cameraName) {
 function SnapshotDetail({ id, cameraNames, report }) {
   const [state, setState] = useState({ status: "loading", data: null, error: "" });
   const [image, setImage] = useState({ url: "", error: "" });
+  const [reviewId, setReviewId] = useState("");
   useEffect(() => {
     let active = true;
     getSnapshot(id).then((data) => {
@@ -84,11 +86,15 @@ function SnapshotDetail({ id, cameraNames, report }) {
       <SpotLabels spots={snapshot.predictions} />
     </div>}
     {summary && <>
-      <p>Nhãn bên dưới là dự đoán AI; chức năng xác minh chưa được backend hỗ trợ.</p>
+      <p>Nhãn hiện tại bao gồm kết quả xác minh mới nhất; dự đoán AI ban đầu được giữ nguyên.</p>
       <div className="manager-table-wrap"><table className="manager-table">
-        <thead><tr><th>Mã ô</th><th>Dự đoán AI</th><th>Confidence</th></tr></thead>
-        <tbody>{snapshot.predictions.map((spot) => <tr key={spot.id}><td>{spot.spot_code}</td><td>{labels[spot.predicted_label] || spot.predicted_label}</td><td>{typeof spot.confidence === "number" ? `${(spot.confidence * 100).toFixed(1)}%` : "—"}</td></tr>)}</tbody>
+        <thead><tr><th>Mã ô</th><th>Dự đoán AI</th><th>Nhãn hiện tại</th><th>Confidence</th>{!report && <th>Xác minh</th>}</tr></thead>
+        <tbody>{snapshot.predictions.map((spot) => <tr key={spot.id}><td>{spot.spot_code}</td><td>{labels[spot.predicted_label] || spot.predicted_label}</td><td>{labels[spot.effective_label] || spot.effective_label}</td><td>{typeof spot.confidence === "number" ? `${(spot.confidence * 100).toFixed(1)}%` : "—"}</td>{!report && <td><button type="button" aria-pressed={reviewId === spot.id} onClick={() => setReviewId(spot.id)}>Xác minh</button></td>}</tr>)}</tbody>
       </table></div>
+      {!report && reviewId && <PredictionReview key={reviewId} spot={snapshot.predictions.find((spot) => spot.id === reviewId)} onRefresh={async () => {
+        const data = await getSnapshot(id);
+        setState({ status: "ready", data, error: "" });
+      }} />}
       {report && <button type="button" className="manager-primary snapshot-export" onClick={() => downloadCsv(snapshot, cameraNames[snapshot.camera_id] || snapshot.camera_id)}>Tải CSV snapshot này</button>}
     </>}
   </div>;

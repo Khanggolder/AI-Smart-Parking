@@ -26,7 +26,7 @@ Phụ trách: Nguyễn Hoàng Minh Khôi (Frontend / DevOps).
 
 Lịch sử hỗ trợ lọc snapshot theo camera, ngày và trạng thái xử lý;
 báo cáo hiển thị chi tiết và xuất CSV cho từng snapshot hoàn thành.
-Xác minh và sửa nhãn đang chờ API backend.
+Lịch sử hỗ trợ xác nhận hoặc sửa nhãn và xem các lần xác minh.
 Dashboard cần Backend W4, database đã migration và AI Service đã nạp model;
 cần kiểm thử toàn bộ luồng với môi trường và model thực tế.
 

@@ -34,6 +34,16 @@ export async function getSnapshotImage(id) {
   return data;
 }
 
+export async function getPredictionReviews(predictionId) {
+  const { data } = await api.get(`/predictions/${predictionId}/reviews`, config());
+  return data;
+}
+
+export async function createPredictionReview(predictionId, payload) {
+  const { data } = await api.post(`/predictions/${predictionId}/reviews`, payload, config());
+  return data;
+}
+
 export async function submitSnapshot(cameraId, file, capturedAt) {
   const form = new FormData();
   form.append("camera_id", cameraId);
