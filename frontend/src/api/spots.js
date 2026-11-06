@@ -24,14 +24,24 @@ function authConfig() {
 }
 
 // GET: lấy danh sách polygon của một camera
-export async function fetchCameraSpots(cameraId) {
+
+export async function fetchCameraSpots(
+  cameraId,
+  includeInactive = false
+) {
   const { data } = await api.get(
     `/cameras/${cameraId}/spots`,
-    authConfig()
+    {
+      ...authConfig(),
+      params: {
+        include_inactive: includeInactive,
+      },
+    }
   );
 
   return data;
 }
+
 
 // POST: tạo polygon mới
 export async function createSpot(

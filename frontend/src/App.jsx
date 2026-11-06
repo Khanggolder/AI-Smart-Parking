@@ -17,6 +17,8 @@ import {
 
 import MainLayout from "./layouts/MainLayout";
 import Dashboard from "./pages/Dashboard";
+import History from "./pages/History";
+import Reports from "./pages/Reports";
 import Login from "./pages/Login";
 
 import {
@@ -26,15 +28,6 @@ import {
 } from "./api/auth";
 
 import "./App.css";
-
-function ComingSoon({ title }) {
-  return (
-    <section className="content-card">
-      <h2>{title}</h2>
-      <p>Chức năng đang được phát triển.</p>
-    </section>
-  );
-}
 
 function LoadingSession() {
   return (
@@ -191,12 +184,12 @@ function App() {
 
             <Route
               path="/history"
-              element={<ComingSoon title="Lịch sử" />}
+              element={<History />}
             />
 
             <Route
               path="/reports"
-              element={<ComingSoon title="Báo cáo" />}
+              element={<Reports />}
             />
           </Route>
         </Route>
@@ -215,7 +208,7 @@ function App() {
             />
             <Route
               path="/dev/polygon-editor"
-              element={<PolygonEditor role="admin" />}
+              element={<PolygonEditor role="admin" demo={true} />}
             />
           </>
         )}

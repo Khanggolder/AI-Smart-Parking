@@ -13,29 +13,22 @@ Phụ trách: Nguyễn Hoàng Minh Khôi (Frontend / DevOps).
 - CSS
 - Lucide React
 - Axios
-- React Router DOM (đã cài, chưa tích hợp routing đầy đủ)
+- React Router DOM
 
 ## 2. Trạng thái hiện tại
 
-Đã có:
-- Khởi tạo React + Vite.
-- Bố cục Dashboard, Sidebar, Header và StatCard.
-- Dashboard mẫu sử dụng dữ liệu giả lập.
-- Wireframe Login, bãi xe, camera, Polygon Editor, Dashboard, History và Reports.
-- ESLint và Vite build.
-- GitHub Actions CI kiểm tra lint và build.
+Đã triển khai:
+- React/Vite, đăng nhập, session và route theo quyền.
+- Quản lý bãi xe, camera và Polygon Editor kết nối Backend.
+- Dashboard tải snapshot, theo dõi job, hiển thị ảnh, polygon,
+  kết quả dự đoán, KPI và trạng thái dữ liệu từ Backend W4.
+- Wireframe, ESLint, Vite build và GitHub Actions CI.
 
-Chưa hoàn thành:
-- Đăng nhập thực tế.
-- CRUD bãi xe/camera.
-- Vẽ, chỉnh sửa và lưu Polygon.
-- Kết nối Backend API.
-- Hiển thị kết quả AI thực tế.
-- Lịch sử, xác minh và báo cáo đầy đủ.
-- Routing đầy đủ giữa các trang.
-
-Lưu ý: Dashboard hiện tại dùng dữ liệu mẫu,
-không phải kết quả từ AI inference.
+Lịch sử hỗ trợ lọc snapshot theo camera, ngày và trạng thái xử lý;
+báo cáo hiển thị chi tiết và xuất CSV cho từng snapshot hoàn thành.
+Lịch sử hỗ trợ xác nhận hoặc sửa nhãn và xem các lần xác minh.
+Dashboard cần Backend W4, database đã migration và AI Service đã nạp model;
+cần kiểm thử toàn bộ luồng với môi trường và model thực tế.
 
 ## 3. Yêu cầu môi trường
 
@@ -119,9 +112,6 @@ Không commit file môi trường chứa thông tin nhạy cảm.
 Lưu ý: Biến bắt đầu bằng VITE_ có thể được đưa
 vào ứng dụng trình duyệt, không dùng cho secrets.
 
-Ở giai đoạn hiện tại, Frontend chưa thực hiện
-kết nối API thực tế.
-
 ## 7. Cấu trúc source
 
     frontend/
@@ -179,7 +169,9 @@ Không coi snapshot là video trực tiếp.
 Khi AI/Backend lỗi, hiển thị thông báo phù hợp;
 không tự chuyển trạng thái ô thành empty.
 
-Các quy tắc này sẽ được hiện thực trong W4.
+Dashboard sử dụng summary và trạng thái STALE do Backend cung cấp.
+Ảnh snapshot được tải qua API có xác thực. Khi job mới thất bại,
+kết quả thành công trước đó vẫn được hiển thị.
 
 ## 9. Tài liệu liên quan
 
@@ -197,5 +189,5 @@ Không commit:
 - Dataset hoặc checkpoint mô hình lớn.
 - node_modules/ và dist/.
 
-Dữ liệu mẫu trong Dashboard chỉ phục vụ phát triển
-giao diện, không phải số liệu vận hành thực tế.
+Chỉ coi kết quả là số liệu vận hành khi đã xác nhận đúng camera,
+ảnh và cấu hình model trong môi trường triển khai.
