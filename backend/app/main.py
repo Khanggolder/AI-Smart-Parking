@@ -11,6 +11,7 @@ from app.api.reference_images import router as reference_images_router
 from app.api.snapshots import router as snapshots_router
 from app.core.config import get_settings
 from app.core.errors import APIError, api_error_handler
+from app.api.reviews import router as reviews_router
 
 app = FastAPI(
     title="AI Smart Parking API",
@@ -42,3 +43,5 @@ app.include_router(spots_router, prefix="/api/v1")
 app.include_router(reference_images_router, prefix="/api/v1")
 
 app.include_router(snapshots_router, prefix="/api/v1")
+
+app.include_router(reviews_router, prefix="/api/v1")
