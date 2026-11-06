@@ -11,7 +11,7 @@ from app.api.deps import require_roles
 from app.core.config import get_settings
 from app.core.errors import APIError
 from app.db.session import get_db
-from app.models import AuditLog, Camera, ParkingSpot, Snapshot, SpotPrediction, User
+from app.models import (AuditLog, Camera, ParkingSpot, Snapshot, SpotPrediction, SpotReview, User,)
 from app.schemas.snapshots import PredictionOut, SnapshotAccepted, SnapshotOut, SnapshotPage, SummaryOut
 from app.services.reference_images import locate_reference_image, validate_reference_image
 from app.services.snapshot_jobs import run_snapshot_job
@@ -24,7 +24,7 @@ reader = require_roles("admin", "operator")
 def summary_from_predictions(predictions: list[PredictionOut]) -> SummaryOut:
     count = {key: 0 for key in ("empty", "occupied", "unknown")}
     for item in predictions:
-        count[item.predicted_label] += 1
+        count[item.effective_label] += 1
     total = len(predictions)
     if total == 0:
         status = "NO_SPOTS"
@@ -143,10 +143,27 @@ def get_snapshot(snapshot_id: UUID, _user: User = Depends(reader), db: Session =
         raise APIError(404, "SNAPSHOT_NOT_FOUND", "Snapshot not found")
     preds = db.scalars(select(SpotPrediction).where(SpotPrediction.snapshot_id == snapshot_id)
                        .order_by(SpotPrediction.spot_code_at_capture)).all()
+    # Latest human-verified label for each prediction (batch query).
+    latest_labels = {}
+    if preds:
+        reviews = db.scalars(
+            select(SpotReview)
+            .where(
+                SpotReview.spot_prediction_id.in_(
+                    [prediction.id for prediction in preds]
+                )
+            )
+            .order_by(SpotReview.revision.desc())
+        ).all()
+        for review in reviews:
+            latest_labels.setdefault(
+                review.spot_prediction_id,
+                review.verified_label,
+            )
     result = [PredictionOut(
         id=p.id, parking_spot_id=p.parking_spot_id,
         spot_code=p.spot_code_at_capture, polygon=p.polygon_at_capture,
-        predicted_label=p.predicted_label, effective_label=p.predicted_label,
+        predicted_label=p.predicted_label, effective_label=latest_labels.get(p.id, p.predicted_label),
         raw_label=p.raw_label, confidence=p.confidence, scores=p.scores,
         model_version=p.model_version, threshold=p.threshold,
     ) for p in preds]
