@@ -31,6 +31,36 @@ function downloadCsv(snapshot, cameraName) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+function ReportSummary({ item }) {
+  const [result, setResult] = useState({ status: "loading", summary: null });
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    if (item.job_status !== "completed") return;
+    let active = true;
+    getSnapshot(item.id).then((snapshot) => {
+      if (active) setResult(snapshot.summary
+        ? { status: "ready", summary: snapshot.summary }
+        : { status: "error", summary: null });
+    }).catch(() => {
+      if (active) setResult({ status: "error", summary: null });
+    });
+    return () => { active = false; };
+  }, [item.id, item.job_status, attempt]);
+
+  if (item.job_status !== "completed") return <td colSpan="5">Chưa có kết quả</td>;
+  if (result.status === "loading") return <td colSpan="5" role="status">Đang tải số liệu...</td>;
+  if (result.status === "error") return <td colSpan="5">
+    Không tải được số liệu.{" "}
+    <button type="button" onClick={() => { setResult({ status: "loading", summary: null }); setAttempt((value) => value + 1); }}>Thử lại</button>
+  </td>;
+  const summary = result.summary;
+  return <>
+    <td>{summary.total}</td><td>{summary.empty}</td><td>{summary.occupied}</td><td>{summary.unknown}</td>
+    <td>{summary.occupancy_rate == null ? "—" : `${summary.occupancy_rate}%`}</td>
+  </>;
+}
+
 function SnapshotDetail({ id, cameraNames, report }) {
   const [state, setState] = useState({ status: "loading", data: null, error: "" });
   const [image, setImage] = useState({ url: "", error: "" });
@@ -168,8 +198,8 @@ export default function SnapshotHistory({ report = false }) {
       {page.status === "ready" && page.items.length > 0 && <>
         <p>Tìm thấy {page.total} snapshot. Chọn một dòng để xem chi tiết{report ? " và tải CSV" : ""}.</p>
         <div className="manager-table-wrap"><table className="manager-table">
-          <thead><tr><th>Thời gian chụp</th><th>Camera</th><th>Trạng thái xử lý</th><th>Chi tiết</th></tr></thead>
-          <tbody>{page.items.map((item) => <tr key={item.id}><td>{new Date(item.captured_at).toLocaleString("vi-VN")}</td><td>{cameraNames[item.camera_id] || item.camera_id}</td><td>{jobNames[item.job_status] || item.job_status}</td><td><button type="button" onClick={() => setSelected(item.id)} aria-pressed={selected === item.id}>Xem chi tiết</button></td></tr>)}</tbody>
+          <thead><tr><th>Thời gian chụp</th><th>Camera</th><th>Trạng thái xử lý</th>{report && <><th>Tổng ô</th><th>Trống</th><th>Có xe</th><th>Chưa xác định</th><th>Tỷ lệ sử dụng</th></>}<th>Chi tiết</th></tr></thead>
+          <tbody>{page.items.map((item) => <tr key={item.id}><td>{new Date(item.captured_at).toLocaleString("vi-VN")}</td><td>{cameraNames[item.camera_id] || item.camera_id}</td><td>{jobNames[item.job_status] || item.job_status}</td>{report && <ReportSummary item={item} />}<td><button type="button" onClick={() => setSelected(item.id)} aria-pressed={selected === item.id}>Xem chi tiết</button></td></tr>)}</tbody>
         </table></div>
         <div className="snapshot-pagination">
           <button type="button" disabled={query.offset === 0} onClick={() => move(Math.max(0, query.offset - PAGE_SIZE))}>Trang trước</button>
