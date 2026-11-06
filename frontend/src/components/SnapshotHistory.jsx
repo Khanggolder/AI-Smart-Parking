@@ -3,37 +3,26 @@ import { fetchCameras } from "../api/parking";
 import { getSnapshot, getSnapshotImage, listSnapshots } from "../api/snapshots";
 import SpotLabels from "./SpotLabels";
 import PredictionReview from "./PredictionReview";
+import { filterSnapshotsByOccupancy } from "../api/snapshotFiltering";
+import { snapshotCsv } from "../api/snapshotCsv";
 
 const PAGE_SIZE = 20;
 const jobNames = { queued: "Đang chờ", processing: "Đang xử lý", completed: "Hoàn thành", failed: "Thất bại" };
 const labels = { empty: "Trống", occupied: "Có xe", unknown: "Chưa xác định" };
 const colors = { empty: "#16a34a", occupied: "#dc2626", unknown: "#64748b" };
-const emptyFilters = { camera: "", status: "", from: "", to: "" };
+const emptyFilters = { camera: "", status: "", occupancy: "", from: "", to: "" };
 
 function message(error) {
+  if (error.message === "OCCUPANCY_FILTER_TOO_MANY") return "Có hơn 500 snapshot hoàn thành. Hãy thu hẹp khoảng ngày hoặc chọn camera trước khi lọc trạng thái ô.";
+  if (error.message === "OCCUPANCY_FILTER_CHANGED") return "Dữ liệu đã thay đổi trong lúc lọc. Hãy thử áp dụng lại bộ lọc.";
   if (error.response?.status === 401) return "Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.";
   if (error.response?.status === 403) return "Bạn không có quyền xem dữ liệu này.";
   if (error.response?.status === 404) return "Snapshot không còn tồn tại hoặc ảnh không khả dụng.";
   return "Không tải được dữ liệu. Hãy kiểm tra kết nối backend và thử lại.";
 }
 
-function csvCell(value) {
-  let text = String(value ?? "");
-  if (/^[\s]*[=+\-@\t\r]/.test(text)) text = "'" + text;
-  return '"' + text.replaceAll('"', '""') + '"';
-}
-
 function downloadCsv(snapshot, cameraName) {
-  const rows = [
-    ["Snapshot ID", "Camera", "Thời gian chụp (UTC)", "Tổng ô", "Ô trống", "Ô có xe", "Ô chưa xác định", "Tỷ lệ sử dụng (%)", "Mã ô", "Dự đoán AI", "Nhãn hiện tại", "Confidence", "Model"],
-    ...snapshot.predictions.map((spot) => [
-      snapshot.id, cameraName, snapshot.captured_at, snapshot.summary.total,
-      snapshot.summary.empty, snapshot.summary.occupied, snapshot.summary.unknown,
-      snapshot.summary.occupancy_rate, spot.spot_code,
-      spot.predicted_label, spot.effective_label, spot.confidence, spot.model_version,
-    ]),
-  ];
-  const blob = new Blob(["\uFEFF" + rows.map((row) => row.map(csvCell).join(",")).join("\r\n")], { type: "text/csv;charset=utf-8" });
+  const blob = new Blob([snapshotCsv(snapshot, cameraName)], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
@@ -125,7 +114,11 @@ export default function SnapshotHistory({ report = false }) {
       ...(query.from && { from: new Date(`${query.from}T00:00:00`).toISOString() }),
       ...(query.to && { to: new Date(`${query.to}T23:59:59.999`).toISOString() }),
     };
-    listSnapshots(params).then((data) => {
+    const request = query.occupancy
+      ? filterSnapshotsByOccupancy(params, query.occupancy, listSnapshots, getSnapshot)
+        .then((items) => ({ items: items.slice(query.offset, query.offset + PAGE_SIZE), total: items.length }))
+      : listSnapshots(params);
+    request.then((data) => {
       if (active) setPage({ status: "ready", items: data.items, total: data.total, error: "" });
     }).catch((error) => {
       if (active) setPage({ status: "error", items: [], total: 0, error: message(error) });
@@ -155,15 +148,17 @@ export default function SnapshotHistory({ report = false }) {
   return <div className="dashboard-page">
     <form className="content-card" onSubmit={applyFilters}>
       <h2>{report ? "Báo cáo theo snapshot" : "Lịch sử snapshot"}</h2>
-      <p>Lọc theo camera, thời gian chụp và trạng thái xử lý.</p>
+      <p>Lọc theo camera, thời gian chụp, trạng thái xử lý và nhãn hiện tại của ô.</p>
       {cameraError && <p className="manager-error" role="alert">Không tải được danh sách camera: {cameraError}</p>}
       <div className="snapshot-filters">
         <label>Camera<select value={draft.camera} onChange={(e) => setDraft({ ...draft, camera: e.target.value })}><option value="">Tất cả camera</option>{cameras.map((camera) => <option key={camera.id} value={camera.id}>{camera.name}</option>)}</select></label>
         <label>Trạng thái xử lý<select value={draft.status} onChange={(e) => setDraft({ ...draft, status: e.target.value })}><option value="">Tất cả trạng thái</option>{Object.entries(jobNames).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+        <label>Trạng thái ô<select value={draft.occupancy} onChange={(e) => setDraft({ ...draft, occupancy: e.target.value })}><option value="">Tất cả trạng thái ô</option>{Object.entries(labels).map(([value, label]) => <option key={value} value={value}>Có ô {label.toLowerCase()}</option>)}</select></label>
         <label>Từ ngày<input type="date" value={draft.from} onChange={(e) => setDraft({ ...draft, from: e.target.value })} /></label>
         <label>Đến ngày<input type="date" value={draft.to} onChange={(e) => setDraft({ ...draft, to: e.target.value })} /></label>
         <button className="manager-primary">Áp dụng bộ lọc</button>
       </div>
+      {draft.occupancy && <p className="manager-hint">Lọc snapshot hoàn thành có ít nhất một ô mang nhãn hiện tại đã chọn. Sau khi xác minh, áp dụng lại bộ lọc để cập nhật danh sách.</p>}
       {formError && <p className="manager-error" role="alert">{formError}</p>}
     </form>
     <section className="content-card">
