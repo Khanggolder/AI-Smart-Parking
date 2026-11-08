@@ -79,6 +79,10 @@ Kiểm tra ESLint:
 
     npm run lint
 
+Chạy kiểm thử frontend:
+
+    npm test
+
 Build phiên bản production:
 
     npm run build
@@ -87,7 +91,7 @@ Chạy thử phiên bản đã build:
 
     npm run preview
 
-Các lệnh lint và build cũng được chạy trên
+Các lệnh lint, test và build cũng được chạy trên
 GitHub Actions thông qua workflow:
 
 .github/workflows/frontend-ci.yml
