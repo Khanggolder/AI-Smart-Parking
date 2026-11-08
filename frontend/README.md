@@ -180,6 +180,8 @@ kết quả thành công trước đó vẫn được hiển thị.
 ## 9. Tài liệu liên quan
 
 - docs/wireframes/: thiết kế giao diện W1.
+- [Hướng dẫn sử dụng](../docs/USER_GUIDE.md): thao tác cho Admin và Operator.
+- [Hướng dẫn Docker](../docs/DOCKER_GUIDE.md): chạy môi trường demo bằng Docker Compose.
 - docs/api/backend-api-contract-v1.md: hợp đồng API.
 - ai-service/docs/FRONTEND_HANDOVER.md: quy ước hiển thị AI.
 - CONTRIBUTING.md: quy trình làm việc Git.
