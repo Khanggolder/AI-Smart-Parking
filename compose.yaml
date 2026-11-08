@@ -1,0 +1,57 @@
+services:
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: parking
+      POSTGRES_USER: parking_user
+      POSTGRES_PASSWORD: ${PARKING_POSTGRES_PASSWORD:?Set PARKING_POSTGRES_PASSWORD in compose.env}
+    volumes:
+      - parking_db:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U parking_user -d parking"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  ai:
+    build:
+      context: .
+      dockerfile: ai-service/Dockerfile
+    environment:
+      AI_DEVICE: cpu
+      AI_CHECKPOINT_PATH: /model/model/best.pt
+      AI_THRESHOLD_CONFIG: /model/threshold_candidate.json
+    volumes:
+      - type: bind
+        source: ${PARKING_MODEL_RELEASE_DIR:?Set PARKING_MODEL_RELEASE_DIR in compose.env}
+        target: /model
+        read_only: true
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://parking_user:${PARKING_POSTGRES_PASSWORD:?Set PARKING_POSTGRES_PASSWORD in compose.env}@db:5432/parking
+      JWT_SECRET_KEY: ${PARKING_JWT_SECRET_KEY:?Set PARKING_JWT_SECRET_KEY in compose.env}
+      AI_SERVICE_URL: http://ai:8001
+      REFERENCE_IMAGE_DIR: /storage/reference-images
+      SNAPSHOT_IMAGE_DIR: /storage/snapshots
+    volumes:
+      - parking_images:/storage
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    ports:
+      - "127.0.0.1:${PARKING_WEB_PORT:-8080}:80"
+    depends_on:
+      - backend
+
+volumes:
+  parking_db:
+  parking_images:

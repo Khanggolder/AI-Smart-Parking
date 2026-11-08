@@ -100,6 +100,8 @@
   padding: 25px;
   border-radius: 12px;
   color: #0f172a;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .content-card p {
@@ -108,6 +110,7 @@
 
 .dashboard-page {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 20px;
 }
 
@@ -138,6 +141,8 @@
 .dashboard-fields label {
   display: grid;
   gap: 8px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .dashboard-fields input {
@@ -188,6 +193,8 @@
   display: grid;
   gap: 8px;
   font-weight: 600;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .snapshot-filters input,
@@ -416,6 +423,7 @@
 
 .manager-page {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 20px;
 }
 
@@ -476,6 +484,7 @@
 
 .manager-table-wrap {
   overflow-x: auto;
+  max-width: 100%;
 }
 
 .manager-table {
@@ -639,6 +648,7 @@
   .sidebar nav {
     flex-direction: row;
     overflow-x: auto;
+    max-width: 100%;
     padding-bottom: 6px;
   }
 
@@ -650,6 +660,28 @@
 
   .main-content {
     padding: 16px;
+    width: 100%;
+  }
+
+  .content-card {
+    padding: 18px;
+  }
+
+  .dashboard-camera {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .dashboard-fields,
+  .snapshot-filters {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .dashboard-fields input,
+  .snapshot-filters input,
+  .snapshot-filters select {
+    width: 100%;
   }
 
   .header {
@@ -676,6 +708,7 @@
 
 .polygon-editor {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
 }
 
@@ -690,6 +723,12 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.polygon-controls input[type="file"] {
+  max-width: 100%;
 }
 
 .polygon-controls button {
@@ -739,7 +778,7 @@
   background: #1d4ed8;
 }
 
-.polygon-list-item-selected {
+.polygon-list-item.polygon-list-item-selected {
   background: #eff6ff;
   border-color: #2563eb;
 }
@@ -777,7 +816,7 @@
   border-radius: 8px;
 }
 
-.polygon-list-item button {
+.polygon-list-actions button {
   padding: 8px 14px;
   color: #dc2626;
   background: white;
@@ -786,7 +825,7 @@
   cursor: pointer;
 }
 
-.polygon-list-item button:hover {
+.polygon-list-actions button:hover {
   background: #fef2f2;
 }
 

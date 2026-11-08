@@ -12,6 +12,7 @@ coverage/
 .env
 .env.*
 !.env.example
+compose.env
 *.pem
 # IDE / OS
 .idea/

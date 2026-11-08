@@ -5,7 +5,7 @@ on:
   push:
     branches:
       - main
-      - feature/frontend-khoi
+      - 'feature/frontend-*'
   pull_request:
     branches:
       - main
@@ -13,7 +13,7 @@ on:
 
 jobs:
   frontend-check:
-    name: Lint and Build Frontend
+    name: Lint, Test and Build Frontend
     runs-on: ubuntu-latest
 
     defaults:
@@ -36,6 +36,9 @@ jobs:
 
       - name: Check ESLint
         run: npm run lint
+
+      - name: Run frontend tests
+        run: npm test
 
       - name: Build React application
         run: npm run build
