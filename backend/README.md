@@ -1,316 +1,60 @@
 # Backend — AI Smart Parking
 
-**W2 / Task 3.1**: FastAPI, PostgreSQL, SQLAlchemy ORM (8 entities), Alembic,
-JWT login, Admin/Operator authorization, and parking lot/camera CRUD.
-Snapshots, AI integration, and public user-registration endpoints are **not implemented**.
+Backend dùng FastAPI, PostgreSQL, SQLAlchemy và Alembic. Nó quản lý tài khoản, bãi xe, camera, polygon, ảnh tham chiếu, snapshot, lịch sử và review. Mỗi snapshot được gửi tới AI `POST /v1/infer`; kết quả hợp lệ được lưu cùng trạng thái job. Backend không chứa trọng số model.
 
-## Prerequisites and local setup (Windows CMD)
+## Chạy local
 
-- Python 3.11+, PostgreSQL 18 (or compatible).
-- From the repository root, create `.env` from `.env.example` if needed. Set a real
-  `DATABASE_URL` for your local PostgreSQL database. Never commit `.env`.
-- Generate a signing secret and copy the printed value into `JWT_SECRET_KEY` in `.env`:
+Cần Python 3.11+ và PostgreSQL. Từ root repository, sao chép `.env.example` thành `.env` và đặt `DATABASE_URL`, `JWT_SECRET_KEY` (tối thiểu 32 byte), `AI_SERVICE_URL` và đường dẫn lưu ảnh nếu cần. Không commit `.env`. AI phải có checkpoint rc2, `/ready` trả `ready`, đúng model version `mobilenetv3-small-w2-488ed38efe01` và threshold `0.9`; `/health` chỉ kiểm tra tiến trình.
 
-```bat
-py -c "import secrets; print(secrets.token_urlsafe(48))"
+Trong PowerShell, tại thư mục `backend/`:
+
+```powershell
+py -3.11 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m alembic upgrade head
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
 ```
 
-Do not use that printed value in git, screenshots, chat, or PR descriptions.
-`JWT_SECRET_KEY` must be at least 32 UTF-8 bytes; there is no usable default.
-`JWT_EXPIRE_MINUTES=60` creates 1-hour access tokens. Use HTTPS outside local demo.
+Migration hiện gồm schema ban đầu và `20261027_02_snapshot_ai_fields`. Chạy `alembic upgrade head` trước khi dùng snapshot. Chỉ dùng database local do nhóm kiểm soát; không chạy migration trên database có dữ liệu thật khi chưa kiểm tra.
 
-```bat
-cd /d D:\DATT\AI-Smart-Parking\backend
-py -m venv .venv
-.venv\Scripts\python.exe -m pip install -r requirements.txt
-.venv\Scripts\python.exe -m alembic upgrade head
-.venv\Scripts\python.exe -m pytest -q
+Tạo tài khoản bằng lệnh tương tác, không truyền mật khẩu trên dòng lệnh:
+
+```powershell
+.\.venv\Scripts\python.exe -m app.scripts.create_user --username admin01 --role admin
+.\.venv\Scripts\python.exe -m app.scripts.create_user --username operator01 --role operator
 ```
 
-The existing initial migration already contains the `users` table: no auth migration is necessary.
+Mật khẩu tối thiểu 12 ký tự, lưu dưới dạng Argon2id. Không có API đăng ký công khai. `JWT_EXPIRE_MINUTES=60` mặc định; Backend kiểm quyền từ database ở mỗi request. Admin được sửa cấu hình; Admin và Operator được đọc, gửi snapshot và xác minh dự đoán. Không có rate limit, refresh token hoặc thu hồi token trong MVP.
 
-## Create initial users (local operator action; no public registration)
+## API thực tế
 
-```bat
-.venv\Scripts\python.exe -m app.scripts.create_user --username admin01 --role admin
-.venv\Scripts\python.exe -m app.scripts.create_user --username operator01 --role operator
-```
+Base URL local: `http://localhost:8000/api/v1`; Swagger ở `http://localhost:8000/docs`. Ngoài health và login, API yêu cầu `Authorization: Bearer <token>`.
 
-Each command prompts twice for a password, without displaying it. Minimum 12
-characters; passwords are stored only as Argon2id hashes. Existing usernames
-cannot be silently overwritten. Do not pass passwords on the command line.
+| Chức năng | Endpoint chính | Quyền |
+|---|---|---|
+| Kiểm tra và tài khoản | `GET /health`, `POST /auth/login`, `GET /auth/me` | Public, Public, cả hai |
+| Bãi xe | `GET/POST /parking-lots`, `GET/PATCH /parking-lots/{id}` | Đọc: cả hai; ghi: Admin |
+| Camera | `GET/POST /cameras`, `GET/PATCH /cameras/{id}` | Đọc: cả hai; ghi: Admin |
+| Ảnh tham chiếu | `PUT/GET /cameras/{id}/reference-image` | PUT: Admin; GET: cả hai |
+| Polygon | `GET/POST /cameras/{id}/spots`, `PATCH/DELETE /spots/{id}` | Đọc: cả hai; ghi: Admin |
+| Snapshot | `POST/GET /snapshots`, `GET /snapshots/{id}`, `GET /snapshots/{id}/image` | Cả hai |
+| Review | `POST/GET /predictions/{id}/reviews` | Cả hai |
 
-## Run and verify
+`POST /snapshots` nhận multipart `camera_id`, `captured_at` có múi giờ và ảnh JPEG/PNG; trả `202` với snapshot ID. `GET /snapshots/{id}` cho biết `queued`, `processing`, `completed` hoặc `failed`, dự đoán và summary khi hoàn tất. `GET /snapshots` hỗ trợ lọc camera, job status, thời gian và phân trang. Ảnh được trả qua endpoint có JWT, không mở thư mục lưu ảnh công khai. Frontend tự tạo CSV cho một snapshot hoàn thành; Backend chưa có `GET /reports/snapshots.csv`.
 
-```bat
-.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
-```
+Camera cần ảnh tham chiếu và ít nhất một polygon hoạt động trước khi nhận snapshot. Ảnh snapshot phải cùng chiều rộng và cao với ảnh tham chiếu. Polygon dùng tọa độ chuẩn hóa `{x,y}`, 3–50 đỉnh, không tự cắt; mỗi camera tối đa 100 ô đang hoạt động. Đổi ảnh tham chiếu khi đã có ô hoạt động bị từ chối để tránh lệch polygon. Thay đổi cấu hình có `config_version` và có thể trả `409 CAMERA_VERSION_CONFLICT`.
 
-- `GET /api/v1/health` — public (`{"status":"ok","service":"backend"}`).
-- `POST /api/v1/auth/login` — JSON body `{"username":"admin01","password":"..."}`;
-  response `access_token`, `token_type: bearer`, `expires_in`.
-- `GET /api/v1/auth/me` — header `Authorization: Bearer <access_token>`;
-  response `id`, `username`, `role`, `is_active` (no password hash).
-- `GET /docs` — Swagger UI; use **Authorize** and paste the access token.
+## AI và trạng thái
 
-**RBAC:** `require_roles("admin")` protects Admin-only CRUD routes later;
-`require_roles("admin", "operator")` permits either role. Roles are read
-from PostgreSQL for each request, not trusted from a JWT claim. Missing,
-invalid, expired, or inactive accounts return 401; insufficient role returns 403.
-Errors implemented by the auth module use `{"error":{"code":...,"message":...,"details":{}}}`.
-Schema-level FastAPI 422 responses still use the framework default; this is
-not a global error-normalization change.
+[`app/services/ai_client.py`](app/services/ai_client.py) chuyển polygon sang `[x,y]` rồi gửi multipart `image`, `camera_id`, `spots_json` tới `/v1/infer`. Adapter kiểm camera ID, thứ tự và số lượng spot ID, nhãn, scores, confidence, threshold và model version. [`app/services/snapshot_jobs.py`](app/services/snapshot_jobs.py) ghi tất cả prediction và `completed` trong một giao dịch. AI timeout, lỗi HTTP hoặc response sai khiến job `failed`; hệ thống không tạo `unknown` giả. `unknown` từ model được giữ nguyên.
 
-Security limits of this MVP stage: no login rate limiter, refresh tokens,
-logout/revocation list, or password-reset flow. Deploy only behind HTTPS with
-additional rate limiting and a strong secret when leaving local demo.
+Summary dùng nhãn hiệu lực sau review: `FULL` khi mọi ô có xe, `AVAILABLE` khi có ô trống, `UNDETERMINED` khi không có ô trống nhưng còn `unknown`. `STALE` dựa trên thời điểm chụp của snapshot hoàn thành và `STALE_THRESHOLD_MINUTES` (mặc định 30). Review lưu lịch sử, không ghi đè nhãn AI gốc.
 
-## Testing and Git rules
+Job chạy bằng FastAPI `BackgroundTasks` trong tiến trình web. Nếu Backend dừng giữa lúc xử lý, job có thể kẹt ở `queued` hoặc `processing`; chưa có tự khôi phục hoặc retry bền vững. Khi demo, dùng một Backend worker, kiểm tra job sau mỗi lần tải ảnh và dùng snapshot mới nếu job kẹt. Không xóa dữ liệu để xử lý sự cố này.
 
-`python -m pytest -q` covers health, migration, password hashing, JWT expiry,
-invalid tokens, disabled users and role checks using disposable SQLite fixtures.
-Database integration/migration should also be confirmed against local PostgreSQL.
+## Kiểm thử và tài liệu
 
-Reference: `docs/design/backend-architecture-erd.md`,
-`docs/api/backend-api-contract-v1.md` and
-`docs/requirements/backend-use-cases-test-matrix.md`.
-Commit code/tests on a feature branch; link the WBS issue in a PR. Never commit
-real `.env` values, tokens, passwords, database files or model weights.
+`python -m pytest -q` dùng SQLite tạm và HTTP AI mock cho phần lớn test; test PostgreSQL concurrency chỉ chạy khi cấu hình database test riêng. Test mock kiểm logic Backend, không chứng minh model thật chạy. [Báo cáo E2E W6](reports/w6_7_3_2_e2e_integration.md) ghi một lần thử với AI thật, PostgreSQL và **một ô**. Cần thử nhiều ô và luồng trình duyệt trên máy demo.
 
-## W2 / Task 3.2: Parking Lots and Cameras
-
-All endpoints use `/api/v1` and require `Authorization: Bearer <access_token>`.
-Operator and Admin can read; **only Admin can create or update** resources.
-
-| Method | Path | Role |
-| --- | --- | --- |
-| GET | `/parking-lots?limit=20&offset=0` | Admin/Operator |
-| POST | `/parking-lots` | Admin |
-| GET | `/parking-lots/{lot_id}` | Admin/Operator |
-| PATCH | `/parking-lots/{lot_id}` | Admin |
-| GET | `/cameras?parking_lot_id={uuid}&limit=20&offset=0` | Admin/Operator |
-| POST | `/cameras` | Admin |
-| GET | `/cameras/{camera_id}` | Admin/Operator |
-| PATCH | `/cameras/{camera_id}` | Admin |
-
-Collection responses have `{ "items": [...], "total": 0, "limit": 20, "offset": 0 }`,
-with `limit` between 1 and 100. Frontend `src/api/parking.js` accepts this structure.
-
-Create a parking lot: `{ "name": "Lot A", "description": "Gate 1" }`.
-Create a camera: `{ "parking_lot_id": "<lot_uuid>", "name": "CAM-01" }`.
-PATCH parking lot accepts `name` and/or `description` (including `null` to clear description).
-PATCH camera accepts `{ "name": "CAM-02", "expected_camera_config_version": 1 }`.
-The expected version is optional for the existing Frontend, but recommended for
-concurrent edits. Successful rename increments `config_version`; unchanged name
-is a no-op. A stale version returns HTTP 409, code `CAMERA_VERSION_CONFLICT`.
-
-Each successful create/actual update writes an `audit_logs` row in the same DB transaction.
-Fields for reference images and parking-lot association are intentionally **not**
-editable via the camera PATCH. The image upload endpoint will be implemented later.
-No new database migration is required because the W2 schema already contains these fields.
-
-### React CORS (development)
-
-The backend permits `http://localhost:5173` and `http://127.0.0.1:5173` by default.
-Override with comma-separated `CORS_ORIGINS` in the root `.env` if your Vite port differs.
-Do not set a wildcard origin for a deployed admin application.
-
-### Verify (Windows CMD)
-
-```bat
-cd /d D:\DATT\AI-Smart-Parking\backend
-.venv\Scripts\python.exe -m pytest -q
-.venv\Scripts\python.exe -m alembic current
-.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
-```
-
-In `/docs`, log in as Admin and select **Authorize** to test POST/PATCH.
-Log in as Operator to check that GET is allowed while POST/PATCH return 403.
-The CRUD tests use disposable SQLite; confirm saves persist in your real PostgreSQL as well.
-
-
-## W3 phase 1: parking spot polygons (FR-03/FR-04)
-
-Endpoints require JWT. Admin can create, edit and deactivate; Admin and Operator can list.
-All coordinates are normalized 0..1 **relative to one camera reference frame**.
-
-| Method | API path | Role | Result |
-| --- | --- | --- | --- |
-| GET | `/cameras/{camera_id}/spots?include_inactive=false` | Both | `200` with `{items,total,camera_config_version}` |
-| POST | `/cameras/{camera_id}/spots` | Admin | `201` |
-| PATCH | `/spots/{spot_id}` | Admin | `200` |
-| DELETE | `/spots/{spot_id}?expected_camera_config_version=N` | Admin | `204` soft-deactivate |
-
-Create payload:
-
-```json
-{
-  "spot_code": "P01",
-  "polygon": [{"x":0.10,"y":0.20},{"x":0.25,"y":0.20},{"x":0.25,"y":0.40}],
-  "expected_camera_config_version": 1
-}
-```
-
-Patch requires `expected_camera_config_version` and at least one of `spot_code`,
-`polygon`. Check the latest camera version in GET response. Every actual edit
-increments `camera.config_version` exactly once; a no-op patch does not. A
-stale version returns `409 CAMERA_VERSION_CONFLICT`. Deleted spots remain stored
-for history (and their spot codes remain reserved); `include_inactive=true`
-returns them for administrative inspection.
-
-Polygon validator rejects fewer than 3 or more than 50 points, repeated vertices,
-out-of-range coordinates, intersections/touching of nonadjacent edges and
-zero/tiny area. Spot code is case-normalized to uppercase and unique per camera.
-At most 100 **active** spots per camera are allowed for the AI service.
-All writes and audit log entries are committed together.
-
-**Integration boundary:** The React Polygon Editor route currently displays a
-placeholder on `main`; this PR exposes Backend APIs only. `PUT /cameras/{id}/reference-image`
-(image upload, dimensions and secure storage) is a subsequent W3 task, so saving
-polygon geometry here does not yet verify its correspondence to a reference
-image. Require a camera reference image before real snapshots/inference. The
-snapshot service must copy polygon and configuration version at capture time.
-No new Alembic migration is needed.
-
-
-## W3 phase 2: camera reference images (FR-03/FR-04)
-
-This phase adds two JWT-protected routes:
-
-| Method | Path | Role | Description |
-| --- | --- | --- | --- |
-| PUT | `/cameras/{camera_id}/reference-image` | Admin | Upload and configure a camera reference frame |
-| GET | `/cameras/{camera_id}/reference-image` | Admin/Operator | Retrieve the current image as protected binary content |
-
-The **PUT** request is `multipart/form-data`, not JSON:
-
-- `image`: actual JPEG (`image/jpeg`) or PNG (`image/png`) file, mandatory.
-- `expected_camera_config_version`: current positive integer camera version, mandatory.
-
-On success, `200` returns the normal `CameraOut` with updated
-`reference_image_path` (an opaque *relative storage key*),
-`reference_width`, `reference_height` and incremented `config_version`.
-Check `GET /cameras/{id}` before submitting: every camera/polygon edit can
-increase the version. Stale versions return `409 CAMERA_VERSION_CONFLICT`.
-
-For a camera **with active parking spots**, replacing/setting the reference
-frame returns `409 ACTIVE_SPOTS_EXIST`: first deactivate affected spots and
-then upload the frame; redraw fresh polygons afterwards. This prevents silently
-reusing normalized polygons over a different frame. **Use a new camera** if you
-want to test image upload without disturbing the polygons created during W3.
-
-Upload checks MIME **and decoded content**, detects truncated images, enforces
-`UPLOAD_MAX_MB` (10 MiB by default) and a 20-million-pixel maximum. Invalid
-image → `422`; unsupported/type mismatch → `415`; oversized file → `413`.
-The original client filename is never used. The bytes are stored outside
-public static folders with random immutable filenames, under
-`REFERENCE_IMAGE_DIR` (`backend/storage/reference-images` by default).
-This directory is Git-ignored. No API permits arbitrary filesystem paths.
-GET requires Bearer authentication and serves only the image for that camera,
-with private/no-store cache headers. Do not serve the storage folder publicly.
-
-A successful upload atomically updates camera metadata/version and its audit log
-in one DB transaction; a failed DB transaction removes the new upload. An old
-reference image is intentionally **retained** following replacement; automated
-retention/garbage collection is not yet implemented. Because the DB schema
-already contains all reference-image fields, no new Alembic revision is needed.
-
-Run locally (CMD, inside `backend`):
-
-```bat
-.venv\Scripts\python.exe -m pip install -r requirements.txt
-.venv\Scripts\python.exe -m pytest -q
-.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
-```
-
-In Swagger `/docs`, authenticate as `admin01`, find PUT under
-`camera-reference-images`, select an actual JPG/PNG file and enter the
-current version. Confirm the response metadata, then GET the same camera
-image using `operator01`. JPEG/PNG binaries may be displayed/downloaded
-by Swagger instead of printed as JSON. PostgreSQL still needs a real local
-integration check: the unit tests use disposable SQLite and temp storage.
-
-
-## W4: snapshot upload -> real AI /v1/infer -> persisted predictions
-
-Backend **does not ship model weights**. Run Khang's separately handed-over
-`ai-smart-parking-model-v0.1.0-rc2.zip` after verifying its SHA-256 and
-`verify_release.py`. AI's `/ready` must return HTTP 200, status `ready`,
-model version `mobilenetv3-small-w2-488ed38efe01` and threshold `0.9`.
-`/health=200` alone is not evidence the model loaded. In `.env` use:
-
-```ini
-AI_SERVICE_URL=http://127.0.0.1:8001
-AI_TIMEOUT_SECONDS=30
-SNAPSHOT_IMAGE_DIR=backend/storage/snapshots
-STALE_THRESHOLD_MINUTES=30
-```
-
-**Apply migration before starting W4 Backend (inside backend/):**
-
-```bat
-.venv\Scripts\python.exe -m pip install -r requirements.txt
-.venv\Scripts\python.exe -m alembic upgrade head
-.venv\Scripts\python.exe -m alembic current
-.venv\Scripts\python.exe -m pytest -q
-.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
-```
-
-The new migration is `20261027_02_snapshot_ai_fields`; the W2 migration
-`20261025_01_initial_schema.py` is unchanged. W4 reuses the existing 8 tables.
-
-| Method | API path (under `/api/v1`) | Role | Description |
-| --- | --- | --- | --- |
-| POST | `/snapshots` | Admin/Operator | multipart `camera_id`, `captured_at` with timezone, `image` JPEG/PNG; returns `202` with UUID and `job_status=queued` |
-| GET | `/snapshots/{snapshot_id}` | Admin/Operator | Job status, AI predictions, original summary and error code |
-| GET | `/snapshots/{snapshot_id}/image` | Admin/Operator | Protected private image, not a public static URL |
-| GET | `/snapshots?camera_id=&job_status=&from=&to=&limit=&offset=` | Admin/Operator | History list |
-
-**Prerequisite:** a camera must have a valid, locally stored reference image and
-at least one active polygon. The uploaded snapshot must match reference image
-width/height to keep the normalized ROI aligned (otherwise 422). All active
-spots are frozen into `snapshots.spots_at_capture` together with the current
-camera config version *before* background inference; later polygon changes
-cannot change history. JPEG/PNG payload max is `UPLOAD_MAX_MB` (default 10MiB).
-
-The async MVP job moves `queued` -> `processing` -> `completed` / `failed`.
-AI is called over internal HTTP using `image`, `camera_id`, and `spots_json`
-(`{x,y}` -> `[x,y]`, stable spot UUID, strict ordering). The Backend validates
-camera ID, exact spot ID ordering, model version, scores, confidence, threshold,
-raw/final label consistency and inference time. All predictions and the
-completed job status are inserted in **one DB transaction**. A timeout, AI 503,
-malformed response or mismatched IDs results in a **failed** job with no fake
-`unknown` predictions. Old successful snapshots are not deleted.
-`unknown` must not be interpreted as `empty`; FULL requires every spot occupied.
-
-`GET /snapshots/{id}` has `summary` only for completed jobs. `is_stale` is `null`
-for incomplete/failed jobs; for completed snapshots it reports whether its own
-`captured_at` is past the threshold. A future dashboard should compute freshness
-of the **latest completed** snapshot for the camera, separately from failed jobs.
-`effective_label` equals the AI label until the separate review API is built.
-No frontend changes are included in this Backend PR.
-
-**Limit of this W4 MVP:** Starlette `BackgroundTasks` runs in the web process;
-it is NOT a durable queue. Stopping/reloading the process during inference may
-leave a job in `queued` or `processing`. Before production use a durable queue,
-worker restart recovery, idempotency controls, bounded retries/backoff, storage
-retention/garbage collection, and metrics. Run one Backend worker for the local
-demo. AI Service has no auth, so bind it to loopback/private network only.
-
-### Swagger end-to-end test (real model, not mock)
-
-1. Confirm `http://127.0.0.1:8001/ready` is `ready` and matches rc2.
-2. Login as Admin/Operator in `/docs`, select `POST /api/v1/snapshots`.
-3. Enter the camera UUID (with reference image and active spots),
-   `captured_at` e.g. `2026-10-27T09:00:00+07:00`, and JPEG/PNG snapshot
-   **of the same resolution as the reference image**.
-4. `202` returns a snapshot UUID; use `GET /api/v1/snapshots/{id}` to poll
-   `queued/processing/completed/failed`. Do not assume inference completes
-   within the HTTP upload response.
-5. On completion, confirm predictions, `summary`, `model_version`, and rows
-   in PostgreSQL `snapshots` + `spot_predictions`. To view the original image,
-   use protected `GET /api/v1/snapshots/{id}/image`.
-
-Pytest uses **mocked AI HTTP transport**, disposable SQLite, and temporary
-image files. A passing test suite verifies Backend integration logic but is
-**not** proof that the real checkpoint runs successfully on your PC.
+Chi tiết API xem [backend contract](../docs/api/backend-api-contract-v1.md); kiến trúc và schema hiện thực xem [SDS](../docs/design/w6_sds_backend_as_built.md). Chạy toàn hệ thống bằng [Docker Compose](../docs/DOCKER_GUIDE.md).
