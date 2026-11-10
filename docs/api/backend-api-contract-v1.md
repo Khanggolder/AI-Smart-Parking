@@ -1,8 +1,8 @@
 # AI Smart Parking — REST API Contract v1 (W1 / 2.2)
 
-**Trạng thái:** Contract W1 chốt để triển khai. W2 đã hiện thực Health, Auth và CRUD Parking Lots/Cameras; các endpoint khác ở bảng bên dưới vẫn đang phát triển.  
+**Trạng thái:** Hợp đồng khởi đầu từ W1, đã bổ sung API Backend W2–W6. Đối chiếu chi tiết hiện thực với [Backend README](../../backend/README.md) và [SDS as-built](../design/w6_sds_backend_as_built.md). Các đoạn ghi rõ “W3 phase” phía dưới là lịch sử triển khai, không mô tả trạng thái hiện tại.
 **Base URL:** `http://localhost:8000/api/v1` trong môi trường local.  
-**Data format:** JSON UTF-8, ngoại trừ upload snapshot (multipart) và xuất CSV (`text/csv`).
+**Data format:** JSON UTF-8, ngoại trừ upload ảnh tham chiếu/snapshot (multipart) và các endpoint trả ảnh.
 
 ## 1. Nguyên tắc chung
 
@@ -35,12 +35,14 @@
 | POST | `/snapshots` | Admin/Operator | 202 | upload snapshot và tạo job |
 | GET | `/snapshots` | Admin/Operator | 200 | lọc / phân trang lịch sử |
 | GET | `/snapshots/{snapshot_id}` | Admin/Operator | 200 | trạng thái job, dự đoán, thống kê |
+| GET | `/snapshots/{snapshot_id}/image` | Admin/Operator | 200 | ảnh snapshot được bảo vệ |
 | POST | `/predictions/{prediction_id}/reviews` | Admin/Operator | 201 | chấp nhận/sửa nhãn append-only |
-| GET | `/reports/snapshots.csv` | Admin/Operator | 200 | xuất lịch sử theo filter |
+| GET | `/predictions/{prediction_id}/reviews` | Admin/Operator | 200 | lịch sử xác minh |
+| PUT/GET | `/cameras/{camera_id}/reference-image` | Admin / cả hai | 200 | upload/đọc ảnh tham chiếu |
 
 **Chính sách DELETE:** Không hard-delete đối tượng camera/spot nếu có lịch sử; `DELETE /spots/{id}` là soft delete `is_active=false`. Nếu cần xóa camera/bãi sau này phải định nghĩa riêng để không phá liên kết lịch sử.
 
-**Quản lý ảnh tham chiếu:** Khi triển khai W2, ưu tiên bổ sung `PUT /cameras/{camera_id}/reference-image` (multipart) để ràng buộc metadata kích thước/phiên bản camera, thay vì nhúng base64 vào JSON. Đây là endpoint đã chọn trong contract dù chưa nằm trong bảng CRUD cơ bản trên.
+**Quản lý ảnh tham chiếu:** `PUT /cameras/{camera_id}/reference-image` nhận multipart và cập nhật kích thước/phiên bản camera; `GET` yêu cầu JWT. Xem mục 10.
 
 ## 3. Các payload chính
 
@@ -124,32 +126,36 @@ Giới hạn `UPLOAD_MAX_MB=10` theo `.env.example`. Không chấp nhận file c
   "captured_at":"2026-10-24T20:00:00Z",
   "job_status":"completed",
   "camera_config_version":2,
+  "created_at":"2026-10-24T20:00:01Z",
+  "error_code":null,
+  "ai_model_version":"mobilenetv3-small-w2-488ed38efe01",
+  "ai_threshold":0.9,
+  "ai_processing_time_ms":44.1,
   "summary":{
-    "total":3,"empty":1,"occupied":1,"unknown":1,
-    "occupancy_rate":33.3,"full":false,"status":"AVAILABLE"
+    "total":1,"empty":0,"occupied":0,"unknown":1,
+    "occupancy_rate":0.0,"full":false,"status":"UNDETERMINED"
   },
   "predictions":[
-    {"id":"a0e81783-c9da-4f26-94df-c7989d78e0ca","spot_code":"P01","predicted_label":"empty","effective_label":"empty","confidence":0.94,"model_version":"baseline-v1","polygon":[{"x":0.1,"y":0.2},{"x":0.25,"y":0.2},{"x":0.25,"y":0.4}]},
-    {"id":"4d93f713-fde8-4f59-a9e6-8a6ae69c9503","spot_code":"P02","predicted_label":"occupied","effective_label":"occupied","confidence":0.96,"model_version":"baseline-v1","polygon":[{"x":0.3,"y":0.2},{"x":0.45,"y":0.2},{"x":0.45,"y":0.4}]},
-    {"id":"c219d5f9-21ab-4b73-8c5b-8ae6498f7a49","spot_code":"P03","predicted_label":"unknown","effective_label":"unknown","confidence":0.42,"model_version":"baseline-v1","polygon":[{"x":0.5,"y":0.2},{"x":0.65,"y":0.2},{"x":0.65,"y":0.4}]}
-  ]
+    {"id":"c219d5f9-21ab-4b73-8c5b-8ae6498f7a49","parking_spot_id":"5adf1c0d-138f-400e-9318-df367c61f22c","spot_code":"P01","polygon":[{"x":0.1,"y":0.2},{"x":0.25,"y":0.2},{"x":0.25,"y":0.4}],"predicted_label":"unknown","effective_label":"unknown","raw_label":"empty","confidence":0.84,"scores":{"empty":0.84,"occupied":0.16},"model_version":"mobilenetv3-small-w2-488ed38efe01","threshold":0.9}
+  ],
+  "is_stale":true
 }
 ```
 
-`summary` là tổng từ dự đoán gốc khi snapshot hoàn tất; để phân biệt sau review, Backend có thể trả thêm `reviewed_summary` tính từ nhãn hiệu lực, **không** được ghi đè hoặc đổi ngầm `summary` gốc. Trạng thái `STALE` là trạng thái **độ mới dữ liệu** riêng (`is_stale`), không nhập chung vào `summary.status` (FULL/AVAILABLE/UNDETERMINED/NO_SPOTS).
+`summary` hiện được tính từ `effective_label`, tức nhãn sau review nếu có; `predicted_label` và lịch sử review vẫn giữ kết quả AI gốc. `STALE` là trạng thái độ mới riêng (`is_stale`), không nhập chung vào `summary.status`.
 
 ### 3.5 Review nhãn
 
 `POST /predictions/{prediction_id}/reviews`
 
 ```json
-{"verified_label":"occupied", "reason":"Kiểm tra lại ảnh", "expected_revision":0}
+{"action":"correct", "verified_label":"occupied", "reason":"Kiểm tra lại ảnh", "expected_revision":0}
 ```
 
 `201`:
 
 ```json
-{"id":"0ad65d70-e68a-450d-a81e-cf014cf460fd","prediction_id":"c219d5f9-21ab-4b73-8c5b-8ae6498f7a49","verified_label":"occupied","revision":1,"reviewer_id":"a0d591dd-5da5-4251-95d8-c1b06d6703ac","changed_at":"2026-10-24T20:12:00Z"}
+{"id":"0ad65d70-e68a-450d-a81e-cf014cf460fd","prediction_id":"c219d5f9-21ab-4b73-8c5b-8ae6498f7a49","reviewer_id":"a0d591dd-5da5-4251-95d8-c1b06d6703ac","action":"correct","verified_label":"occupied","revision":1,"reason":"Kiểm tra lại ảnh","changed_at":"2026-10-24T20:12:00Z"}
 ```
 
 ### 3.6 Lọc lịch sử, báo cáo
@@ -160,7 +166,7 @@ Giới hạn `UPLOAD_MAX_MB=10` theo `.env.example`. Không chấp nhận file c
 {"items":[],"total":0,"limit":20,"offset":0}
 ```
 
-CSV phải sử dụng cùng bộ lọc để không sai số với giao diện, định dạng UTF-8; không đưa đường dẫn nội bộ hoặc secret vào CSV.
+Backend chưa có endpoint CSV; frontend tạo CSV của snapshot hoàn thành đang chọn. Không đưa đường dẫn nội bộ hoặc secret vào CSV.
 
 ## 4. Backend ↔ AI Service contract (W4 hiện thực)
 
@@ -233,7 +239,7 @@ FastAPI trả 422 mặc định cho lỗi schema; khi hiện thực cần chuẩ
 - `empty > 0` → `AVAILABLE`, `full=false`.
 - `empty = 0`, `unknown > 0` → `UNDETERMINED`, `full=false`.
 - `total > 0`, `empty = 0`, `unknown = 0` → `FULL`, `full=true`.
-- STALE được tính từ snapshot `completed` gần nhất và `STALE_THRESHOLD_MINUTES`; trả `is_stale` độc lập.
+- `is_stale` của mỗi snapshot `completed` được tính từ `captured_at` của chính snapshot đó và `STALE_THRESHOLD_MINUTES`.
 
 ## 7. Chính sách thay đổi API
 
@@ -298,12 +304,9 @@ and writes `audit_logs` in the same transaction. `401` no/invalid token;
 `403` Operator write; `404` missing spot/camera; `409 SPOT_INACTIVE` when trying
 to change an already disabled spot.
 
-W3 phase 1 validates polygon geometry but **does not implement or enforce**
-reference-image upload/dimensions. W1 UC-01's prerequisite (valid camera reference
-image) remains an integration requirement and is not met by this API alone.
-`PUT /cameras/{camera_id}/reference-image` will be implemented separately before
-relying on polygon coordinates for real snapshots. AI adapter must map stored
-`{x,y}` to `[x,y]` when calling the existing `POST /v1/infer` service.
+Ở giai đoạn W3 phase 1, API chỉ kiểm hình học polygon; ảnh tham chiếu và adapter
+chưa có. Hai phần này hiện đã được triển khai. Backend yêu cầu ảnh tham chiếu
+trước khi nhận snapshot.
 
 
 ## 10. W3 phase 2 — Camera reference-image upload and protected read
@@ -335,7 +338,5 @@ relying on polygon coordinates for real snapshots. AI adapter must map stored
 - Missing camera/image → 404; unauthenticated → 401; Operator PUT → 403.
   No migration needed because `cameras` already has the three reference fields.
 
-**Boundary:** The current React `/polygon-editor` remains a placeholder;
-W3 upload/read APIs do not themselves provide the drawing UI. W4 snapshot/AI
-must still validate a camera reference frame and map `{x,y}` vertices to
-`[x,y]` for the AI service's actual `POST /v1/infer` endpoint.
+**Hiện trạng:** React `/polygon-editor` đã kết nối Backend. Snapshot API kiểm
+ảnh tham chiếu và adapter chuyển `{x,y}` sang `[x,y]` cho `POST /v1/infer`.
