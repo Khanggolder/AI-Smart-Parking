@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import VideoAutoAnalysis from "./VideoAutoAnalysis";
 
 export default function VideoFramePreview() {
   const videoRef = useRef(null);
@@ -9,6 +10,7 @@ export default function VideoFramePreview() {
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [monitoring, setMonitoring] = useState(false);
 
   useEffect(() => () => { if (videoUrl) URL.revokeObjectURL(videoUrl); }, [videoUrl]);
   useEffect(() => () => { if (frame?.url) URL.revokeObjectURL(frame.url); }, [frame]);
@@ -80,7 +82,7 @@ export default function VideoFramePreview() {
       <h1>Thử trích frame từ video MP4</h1>
       <p>Chọn video trên máy, phát hoặc tua đến vị trí cần kiểm tra rồi chọn <strong>Chụp frame</strong>. Video được đọc tại trình duyệt.</p>
       <label className="video-frame-file">Video MP4
-        <input type="file" accept=".mp4,video/mp4" onChange={chooseVideo} />
+        <input type="file" accept=".mp4,video/mp4" onChange={chooseVideo} disabled={monitoring} />
       </label>
       {videoUrl && <video key={videoUrl} ref={videoRef} src={videoUrl} controls playsInline
         onLoadedData={(event) => {
@@ -90,7 +92,7 @@ export default function VideoFramePreview() {
           setError(hasVideo ? "" : "Không tìm thấy hình ảnh video có thể phát. File có thể dùng codec không được trình duyệt hỗ trợ; hãy thử MP4 H.264.");
         }}
         onError={() => { setReady(false); setError("Trình duyệt không thể phát file này. Hãy thử MP4 với codec được trình duyệt hỗ trợ."); }} />}
-      {videoUrl && <button className="manager-primary" type="button" onClick={capture} disabled={!ready || busy}>
+      {videoUrl && <button className="manager-primary" type="button" onClick={capture} disabled={!ready || busy || monitoring}>
         {busy ? "Đang tạo ảnh..." : "Chụp frame"}
       </button>}
       {error && <p className="manager-error" role="alert">{error}</p>}
@@ -102,6 +104,7 @@ export default function VideoFramePreview() {
         <a className="manager-primary video-frame-download" href={frame.url} download="video-frame.jpg">Tải ảnh JPEG</a>
         <p>Nếu muốn thử AI, tải ảnh này lên Dashboard bằng luồng snapshot hiện có và nhập đúng thời gian chụp. Việc gửi ảnh sẽ tạo snapshot trong lịch sử.</p>
       </section>}
+      <VideoAutoAnalysis videoRef={videoRef} ready={ready} monitoring={monitoring} setMonitoring={setMonitoring} />
       <p><Link to="/">Về Dashboard</Link></p>
     </section>
   </main>;

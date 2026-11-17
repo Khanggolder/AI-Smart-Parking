@@ -211,6 +211,18 @@
   text-decoration: none;
 }
 
+.video-auto-analysis {
+  margin-top: 24px;
+  padding: 16px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+}
+
+.video-auto-analysis input[type="number"] {
+  width: 140px;
+  max-width: 100%;
+}
+
 .snapshot-filters {
   display: flex;
   flex-wrap: wrap;

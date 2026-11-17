@@ -2,7 +2,7 @@
 
 ## Phạm vi
 
-Trang thử nghiệm `/dev/video-frame` chỉ có trong Vite development. Người dùng chọn một file MP4 trên máy, phát hoặc tua video, chụp frame đang hiển thị bằng Canvas và tải ảnh JPEG về. Video được đọc trong trình duyệt; trang thử nghiệm không tự tải video hay ảnh lên backend.
+Trang thử nghiệm `/dev/video-frame` chỉ có trong Vite development. Người dùng chọn một file MP4 trên máy, phát hoặc tua video, chụp frame đang hiển thị bằng Canvas và tải ảnh JPEG về. Chế độ thử theo chu kỳ gửi từng frame JPEG tới API snapshot hiện có, không tải file video lên Backend.
 
 Không cần FFmpeg để chạy tính năng trên trình duyệt. Định dạng MP4 là một container; video chỉ phát được nếu codec của nó được trình duyệt hỗ trợ.
 
@@ -20,6 +20,14 @@ Không cần FFmpeg để chạy tính năng trên trình duyệt. Định dạn
 Backend hiện nhận ảnh JPEG/PNG qua API snapshot, không nhận video. Người dùng có thể tải JPEG từ trang thử nghiệm rồi chọn ảnh đó ở Dashboard. Frame phải có cùng kích thước và góc nhìn với ảnh tham chiếu của camera; cùng độ phân giải chưa đủ để bảo đảm polygon khớp. Gửi ảnh đến Dashboard tạo snapshot được lưu trong lịch sử.
 
 Vị trí `currentTime` chỉ là số giây trong video, không phải thời gian chụp thực tế. Nếu biết thời điểm bắt đầu ghi, thời gian của frame có thể được tính bằng thời điểm bắt đầu cộng vị trí trong video. Nếu không biết, không nên gán thời gian hiện tại thành thời gian chụp thật hoặc diễn giải video cũ là dữ liệu trực tiếp.
+
+## Thử nghiệm theo chu kỳ
+
+Đăng nhập trước, chọn camera và video có cùng góc nhìn, kích thước; nhập thời gian bắt đầu ghi video và xác nhận dữ liệu sẽ được lưu. Nếu dùng thời gian giả lập, snapshot trong database không có cờ phân biệt với dữ liệu thật. Chế độ này giới hạn 1–10 frame mỗi lần và chờ 5–300 giây sau khi job trước hoàn thành; không bảo đảm khoảng cách cố định theo thời gian video. Chạy video rồi bắt đầu; tạm dừng video hoặc bấm Dừng sẽ ngừng gửi frame mới. Snapshot đã gửi vẫn tiếp tục xử lý.
+
+Nếu mạng lỗi hoặc job quá hạn khiến không xác định được kết quả, chức năng ngừng và khóa chạy lại trong trang. Kiểm tra Lịch sử, chờ job hoàn tất trước khi tải lại và thử tiếp. Rời trang không hủy job đã gửi.
+
+Kiểm thử thủ công được người dùng báo thành công với ba frame ở khoảng giây 12, 21 và 32. Cần tiếp tục kiểm tra trạng thái từng snapshot trong Lịch sử và các tình huống dừng, lỗi mạng và AI không khả dụng.
 
 ## Hướng mở rộng sau thử nghiệm
 
