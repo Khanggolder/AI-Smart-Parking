@@ -761,6 +761,20 @@
   max-width: 100%;
 }
 
+.polygon-row-preview {
+  margin: 16px 0;
+  padding: 14px;
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+  background: #eff6ff;
+}
+
+.polygon-row-preview input[type="number"] {
+  width: 120px;
+  max-width: 100%;
+  padding: 8px;
+}
+
 .polygon-controls button {
   padding: 10px 14px;
   border: 1px solid #cbd5e1;

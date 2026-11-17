@@ -4,6 +4,7 @@ import { fetchCameras } from "../api/parking";
 import { fetchCameraSpots, createSpot, updateSpot, deleteSpot } from "../api/spots";
 import { fetchCameraReferenceImage, uploadCameraReferenceImage } from "../api/referenceImages";
 import { useLocation } from "react-router-dom";
+import { makePolygonRow, validatePolygonRow } from "../utils/polygonRow";
 
 
 const CAMERA_ID = "CAM-01";
@@ -114,8 +115,17 @@ export default function PolygonEditor({
   const [loadingReference, setLoadingReference] = useState(false);
   const [referenceError, setReferenceError] = useState("");
   const [uploadFile, setUploadFile] = useState(null);
+  const [rowPreview, setRowPreview] = useState(false);
+  const [rowCount, setRowCount] = useState(3);
+  const [rowDx, setRowDx] = useState(0);
+  const [rowDy, setRowDy] = useState(5);
 
   const isAdmin = role === "admin";
+  const rowSource = polygons.find((item) => item.id === selectedPolygonId);
+  const rowCopies = rowPreview && rowSource && draft.length === 0 && editingId === null
+    ? makePolygonRow(rowSource.polygon, rowCount, rowDx, rowDy)
+    : [];
+  const rowError = rowCopies.length ? validatePolygonRow(rowCopies, polygons.map((item) => item.polygon)) : "";
 
   const selectedCamera = cameras.find(
     (camera) => camera.id === selectedCameraId
@@ -786,6 +796,63 @@ async function saveEditPolygon() {
 
 
 
+  async function createPolygonRow() {
+    if (!isAdmin || saving || !rowPreview || !rowSource || !rowCopies.length || rowError || draft.length || editingId !== null || polygons.some((item) => item.pending)) return;
+    if (polygons.length + rowCopies.length > 100) {
+      setMessage("Một camera chỉ được có tối đa 100 ô đang hoạt động.");
+      return;
+    }
+    if (!demo && (!selectedCameraId || cameraVersion === null || loadingSpots || loadingReference)) return;
+    const highest = Math.max(0, ...[...usedSpotCodes, ...polygons.map((item) => item.spot_code)].map((code) => {
+      const match = /^P(\d+)$/.exec(code);
+      const number = match ? Number(match[1]) : 0;
+      return Number.isSafeInteger(number) ? number : 0;
+    }));
+    if (!Number.isSafeInteger(highest + rowCopies.length)) {
+      setMessage("Không thể cấp mã ô tiếp theo.");
+      return;
+    }
+    const items = rowCopies.map((polygon, index) => ({
+      spot_code: `P${String(highest + index + 1).padStart(2, "0")}`,
+      polygon,
+    }));
+    setRowPreview(false);
+    if (demo) {
+      setPolygons((current) => [...current, ...items.map((item) => ({ ...item, id: crypto.randomUUID() }))]);
+      setMessage(`Đã tạo ${items.length} ô trong bản nháp DEV. Nhấn Lưu cấu hình polygon để lưu vào trình duyệt.`);
+      return;
+    }
+    setSaving(true);
+    let version = cameraVersion;
+    let completed = 0;
+    try {
+      for (const item of items) {
+        const saved = await createSpot(selectedCameraId, item.spot_code, item.polygon, version);
+        version = saved.camera_config_version;
+        completed += 1;
+        setPolygons((current) => [...current, saved]);
+        setUsedSpotCodes((current) => [...current, saved.spot_code]);
+        setCameraVersion(version);
+      }
+      setMessage(`Đã lưu ${completed} ô mới vào PostgreSQL thành công.`);
+    } catch {
+      // A timeout can happen after the server saved the spot; reload authoritative data.
+      try {
+        const data = await fetchCameraSpots(selectedCameraId, true);
+        if (!Array.isArray(data?.items) || !Number.isInteger(data?.camera_config_version)) throw new Error("Invalid data");
+        setPolygons(data.items.filter((item) => item.is_active));
+        setUsedSpotCodes(data.items.map((item) => item.spot_code));
+        setCameraVersion(data.camera_config_version);
+        setMessage(`Không thể hoàn tất. Đã xác nhận lưu ${completed}/${items.length} ô trước lỗi; danh sách đã tải lại từ Backend. Hãy kiểm tra trước khi tiếp tục.`);
+      } catch {
+        setCameraVersion(null);
+        setMessage(`Không thể hoàn tất và không tải lại được dữ liệu. Đã xác nhận lưu ${completed}/${items.length} ô trước lỗi; có thể có thêm ô đã lưu. Hãy tải lại trang và kiểm tra trước khi tiếp tục.`);
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function savePendingPolygon() {
     if (!isAdmin || demo || saving) return;
 
@@ -1106,6 +1173,23 @@ async function saveEditPolygon() {
       </div>
     )}
 
+      {import.meta.env.DEV && isAdmin && imageUrl && (
+        <div className="polygon-row-preview">
+          <h3>Thử căn đều theo ô mẫu</h3>
+          <p>Chọn polygon mẫu, chỉnh khoảng cách và kiểm tra ô nét đứt trước khi tạo. Công cụ không tự nhận diện vạch đỗ.</p>
+          <div className="polygon-controls">
+            <label>Số ô thêm <input type="number" min="1" max="30" step="1" disabled={saving} value={rowCount} onChange={(event) => setRowCount(Math.max(1, Math.min(30, Math.trunc(Number(event.target.value)) || 1)))} /></label>
+            <label>Ngang (% ảnh) <input type="number" step="0.1" disabled={saving} value={rowDx} onChange={(event) => setRowDx(Number(event.target.value) || 0)} /></label>
+            <label>Dọc (% ảnh) <input type="number" step="0.1" disabled={saving} value={rowDy} onChange={(event) => setRowDy(Number(event.target.value) || 0)} /></label>
+            <button type="button" disabled={saving || !rowSource || editingId !== null || draft.length > 0} onClick={() => setRowPreview((current) => !current)}>{rowPreview ? "Ẩn xem trước" : "Xem trước các ô"}</button>
+            <button type="button" className="polygon-save-button" disabled={saving || !rowCopies.length || Boolean(rowError) || polygons.some((item) => item.pending) || (!demo && (cameraVersion === null || loadingSpots || loadingReference))} onClick={createPolygonRow}>{saving ? "Đang lưu..." : demo ? "Tạo ô trong bản nháp" : "Tạo và lưu các ô"}</button>
+          </div>
+          <p>{rowSource ? `Ô mẫu: ${rowSource.spot_code}` : "Hãy chọn một polygon đã có làm ô mẫu."}</p>
+          {rowError && <p className="manager-error" role="alert">{rowError}</p>}
+          {rowPreview && <p>Kiểm tra lại từng ô: khoảng cách đều không bảo đảm khớp vạch hoặc phối cảnh. Kiểm tra chồng lấn dùng khung bao và có thể chặn các ô không thực sự giao nhau.</p>}
+        </div>
+      )}
+
       {message && <p role="status">{message}</p>}
 
       
@@ -1145,6 +1229,9 @@ async function saveEditPolygon() {
             aria-label="Vùng vẽ polygon"
           >
 
+        {import.meta.env.DEV && rowCopies.map((copy, index) => (
+          <polygon key={`preview-${index}`} points={toSvgPoints(copy)} fill="rgba(37,99,235,0.16)" stroke="#2563eb" strokeWidth="3" strokeDasharray="8 5" vectorEffect="non-scaling-stroke" pointerEvents="none" />
+        ))}
         {polygons.map((item) => (
           <polygon
             key={item.id}
@@ -1166,7 +1253,7 @@ async function saveEditPolygon() {
             strokeWidth={item.id === selectedPolygonId ? "6" : "4"}
             vectorEffect="non-scaling-stroke"
             onClick={(event) => {
-              if (draft.length || editingId !== null) return;
+              if (saving || draft.length || editingId !== null) return;
               event.stopPropagation();
               setSelectedPolygonId(item.id);
             }}
@@ -1286,7 +1373,7 @@ async function saveEditPolygon() {
 
       {polygons.map((item) => (
         <div key={item.id} className={`polygon-list-item${item.id === selectedPolygonId ? " polygon-list-item-selected" : ""}`}>
-          <button type="button" className="polygon-select-button" aria-pressed={item.id === selectedPolygonId} onClick={() => setSelectedPolygonId(item.id)}>
+          <button type="button" className="polygon-select-button" disabled={saving} aria-pressed={item.id === selectedPolygonId} onClick={() => setSelectedPolygonId(item.id)}>
             {item.spot_code}: {item.polygon.length} đỉnh
             {item.pending ? " . Chưa lưu" : ""}
           </button>
