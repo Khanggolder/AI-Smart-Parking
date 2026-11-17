@@ -10,6 +10,7 @@ const pageTitles = {
   "/polygon-editor": "Vẽ ô đỗ",
   "/history": "Lịch sử",
   "/reports": "Báo cáo",
+  "/video-monitoring": "Phân tích video",
 };
 
 function MainLayout({ auth, onLogout }) {

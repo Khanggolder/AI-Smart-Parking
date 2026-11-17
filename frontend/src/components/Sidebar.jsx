@@ -7,12 +7,14 @@ import {
   History,
   ChartColumn,
   ParkingCircle,
+  Video,
 } from "lucide-react";
 
 const menuItems = [
   { name: "Dashboard", path: "/", icon: LayoutDashboard },
   { name: "Quản lý bãi xe", path: "/parking-lots", icon: CarFront },
   { name: "Camera", path: "/cameras", icon: Camera },
+  { name: "Phân tích video", path: "/video-monitoring", icon: Video },
   {
     name: "Vẽ ô đỗ",
     path: "/polygon-editor",

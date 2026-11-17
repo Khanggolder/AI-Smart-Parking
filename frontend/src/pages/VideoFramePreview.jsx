@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import VideoAutoAnalysis from "./VideoAutoAnalysis";
 
-export default function VideoFramePreview() {
+export default function VideoFramePreview({ production = false }) {
   const videoRef = useRef(null);
   const generation = useRef(0);
   const [videoUrl, setVideoUrl] = useState("");
@@ -77,9 +77,9 @@ export default function VideoFramePreview() {
     }
   }
 
-  return <main className="main-content video-frame-preview">
+  return <div className={production ? "video-frame-preview" : "main-content video-frame-preview"}>
     <section className="content-card">
-      <h1>Thử trích frame từ video MP4</h1>
+      <h1>Phân tích video MP4</h1>
       <p>Chọn video trên máy, phát hoặc tua đến vị trí cần kiểm tra rồi chọn <strong>Chụp frame</strong>. Video được đọc tại trình duyệt.</p>
       <label className="video-frame-file">Video MP4
         <input type="file" accept=".mp4,video/mp4" onChange={chooseVideo} disabled={monitoring} />
@@ -104,8 +104,8 @@ export default function VideoFramePreview() {
         <a className="manager-primary video-frame-download" href={frame.url} download="video-frame.jpg">Tải ảnh JPEG</a>
         <p>Nếu muốn thử AI, tải ảnh này lên Dashboard bằng luồng snapshot hiện có và nhập đúng thời gian chụp. Việc gửi ảnh sẽ tạo snapshot trong lịch sử.</p>
       </section>}
-      <VideoAutoAnalysis videoRef={videoRef} ready={ready} monitoring={monitoring} setMonitoring={setMonitoring} />
+      <VideoAutoAnalysis videoRef={videoRef} ready={ready} monitoring={monitoring} setMonitoring={setMonitoring} production={production} />
       <p><Link to="/">Về Dashboard</Link></p>
     </section>
-  </main>;
+  </div>;
 }

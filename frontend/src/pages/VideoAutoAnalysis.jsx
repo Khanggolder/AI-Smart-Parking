@@ -2,10 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { fetchCameras } from "../api/parking";
 import { TOKEN_KEY } from "../api/auth";
 import { getSnapshot, submitSnapshot } from "../api/snapshots";
-import { waitForVideoSnapshot } from "../utils/videoJobs";
+import { captureTime, validateVideoCamera, waitBeforeNextFrame, waitForVideoSnapshot } from "../utils/videoJobs";
 import { Link } from "react-router-dom";
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const PENDING_VIDEO_JOB = "asp_video_pending_job";
 
 function frameBlob(video) {
   return new Promise((resolve, reject) => {
@@ -25,7 +26,7 @@ function frameBlob(video) {
   });
 }
 
-export default function VideoAutoAnalysis({ videoRef, ready, monitoring, setMonitoring }) {
+export default function VideoAutoAnalysis({ videoRef, ready, monitoring, setMonitoring, production = false }) {
   const [cameras, setCameras] = useState([]);
   const [cameraId, setCameraId] = useState("");
   const [startAt, setStartAt] = useState("");
@@ -34,7 +35,7 @@ export default function VideoAutoAnalysis({ videoRef, ready, monitoring, setMoni
   const [acknowledged, setAcknowledged] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
-  const [locked, setLocked] = useState(false);
+  const [locked, setLocked] = useState(() => Boolean(sessionStorage.getItem(PENDING_VIDEO_JOB)));
   const [cameraAttempt, setCameraAttempt] = useState(0);
   const stop = useRef(false);
   const active = useRef(false);
@@ -47,7 +48,7 @@ export default function VideoAutoAnalysis({ videoRef, ready, monitoring, setMoni
       if (!sessionStorage.getItem(TOKEN_KEY)) throw new Error("not_signed_in");
       return fetchCameras();
     }).then((items) => {
-      if (current) { setCameras(items); setCameraId(items[0]?.id || ""); setError(""); }
+      if (current) { setCameras(items); setCameraId(""); setError(""); }
     }).catch((err) => {
       if (!current) return;
       const statusCode = err.response?.status;
@@ -56,13 +57,16 @@ export default function VideoAutoAnalysis({ videoRef, ready, monitoring, setMoni
     return () => { current = false; mounted.current = false; stop.current = true; };
   }, [cameraAttempt]);
 
-  async function start() {
+  async function start(manual = false) {
     if (active.current || locked || !ready || !cameraId || !acknowledged) return;
     const base = new Date(startAt).getTime();
     if (!startAt || !Number.isFinite(base)) { setError("Hãy nhập thời gian bắt đầu video hợp lệ."); return; }
-    if (!videoRef.current || videoRef.current.paused || videoRef.current.ended) { setError("Hãy phát video trước khi bắt đầu phân tích."); return; }
+    if (!videoRef.current || (!manual && (videoRef.current.paused || videoRef.current.ended))) { setError("Hãy phát video trước khi bắt đầu phân tích theo chu kỳ."); return; }
+    const camera = cameras.find((item) => item.id === cameraId);
+    const cameraError = validateVideoCamera(camera, videoRef.current);
+    if (cameraError) { setError(cameraError); return; }
     const secondsBetween = Number(interval);
-    const maxFrames = Number(limit);
+    const maxFrames = manual ? 1 : Number(limit);
     if (!Number.isInteger(secondsBetween) || secondsBetween < 5 || secondsBetween > 300 || !Number.isInteger(maxFrames) || maxFrames < 1 || maxFrames > 10) {
       setError("Chu kỳ phải từ 5–300 giây và số frame từ 1–10."); return;
     }
@@ -76,17 +80,18 @@ export default function VideoAutoAnalysis({ videoRef, ready, monitoring, setMoni
     try {
       while (!stop.current && completed < maxFrames) {
         const video = videoRef.current;
-        if (!video || video.paused || video.ended) { setStatus(`Đã dừng vì video tạm dừng hoặc kết thúc. Hoàn thành ${completed}/${maxFrames} frame.`); break; }
+        if (!video || (!manual && (video.paused || video.ended))) { setStatus(`Đã dừng vì video tạm dừng hoặc kết thúc. Hoàn thành ${completed}/${maxFrames} frame.`); break; }
         if (video.seeking || video.currentTime <= lastPosition) throw new Error("Video đang tua hoặc chưa tiến tới frame mới. Hãy phát video rồi thử lại.");
         const position = video.currentTime;
         const blob = await frameBlob(video);
         if (stop.current) break;
-        const capturedAt = new Date(base + position * 1000).toISOString();
+        const capturedAt = captureTime(base, position, production);
         setStatus(`Đang gửi frame tại ${position.toFixed(2)} giây (${completed + 1}/${maxFrames})...`);
         let job;
+        sessionStorage.setItem(PENDING_VIDEO_JOB, "pending");
         try { job = await submitSnapshot(cameraId, new File([blob], "video-frame.jpg", { type: "image/jpeg" }), capturedAt); }
         catch (err) {
-          if (!err.response) uncertain = true;
+          if (!err.response || err.response.status >= 500) uncertain = true;
           throw new Error(err.response?.data?.error?.message || (uncertain ? "Không xác nhận được ảnh đã được Backend nhận hay chưa." : "Backend từ chối ảnh; kiểm tra camera, ô đỗ và kích thước ảnh."), { cause: err });
         }
         if (!job?.id) { uncertain = true; throw new Error("Backend không trả mã snapshot hợp lệ."); }
@@ -95,18 +100,19 @@ export default function VideoAutoAnalysis({ videoRef, ready, monitoring, setMoni
           wait: sleep,
           onWait: () => { if (mounted.current) setStatus(`${stop.current ? "Đang dừng; chờ" : "Đang chờ"} AI xử lý frame tại ${position.toFixed(2)} giây...`); },
         });
+        sessionStorage.removeItem(PENDING_VIDEO_JOB);
         completed += 1;
         lastPosition = position;
         if (mounted.current) setStatus(`Đã phân tích ${completed}/${maxFrames} frame. Xem kết quả trong Lịch sử hoặc Dashboard.`);
         if (!stop.current && completed < maxFrames) {
-          const nextAt = Date.now() + secondsBetween * 1000;
-          while (!stop.current && Date.now() < nextAt) await sleep(Math.min(250, nextAt - Date.now()));
+          await waitBeforeNextFrame({ intervalMs: secondsBetween * 1000, shouldStop: () => stop.current, wait: sleep });
         }
       }
       if (mounted.current && stop.current) setStatus(`Đã dừng. Hoàn thành ${completed}/${maxFrames} frame.`);
     } catch (err) {
+      const resultUncertain = uncertain || err.uncertain;
+      if (!resultUncertain) sessionStorage.removeItem(PENDING_VIDEO_JOB);
       if (mounted.current) {
-        const resultUncertain = uncertain || err.uncertain;
         setError(`${err.message}${resultUncertain ? " Hãy kiểm tra Lịch sử trước khi chạy lại; snapshot có thể đã được tạo." : ""}`);
         if (resultUncertain) setLocked(true);
       }
@@ -117,22 +123,29 @@ export default function VideoAutoAnalysis({ videoRef, ready, monitoring, setMoni
   }
 
   return <section className="video-auto-analysis">
-    <h2>Thử phân tích video theo chu kỳ</h2>
+    <h2>Phân tích frame video</h2>
     <p>Frame sẽ được gửi đến Backend và tạo snapshot thật trong Lịch sử. Chọn camera có ảnh tham chiếu cùng góc nhìn và kích thước video.</p>
     <div className="polygon-controls">
       <label>Camera<select className="manager-select" value={cameraId} disabled={monitoring} onChange={(event) => setCameraId(event.target.value)}><option value="">-- Chọn camera --</option>{cameras.map((camera) => <option key={camera.id} value={camera.id}>{camera.name}</option>)}</select></label>
-      <label>Thời gian bắt đầu ghi video<input type="datetime-local" step="1" value={startAt} disabled={monitoring} onChange={(event) => setStartAt(event.target.value)} /></label>
+      <label>Thời gian bắt đầu ghi video (vị trí 0 giây)<input type="datetime-local" step="1" value={startAt} disabled={monitoring} onChange={(event) => setStartAt(event.target.value)} /></label>
       <label>Chu kỳ sau mỗi lần hoàn tất (giây)<input type="number" min="5" max="300" step="1" value={interval} disabled={monitoring} onChange={(event) => setIntervalSeconds(event.target.value)} /></label>
       <label>Số frame tối đa<input type="number" min="1" max="10" step="1" value={limit} disabled={monitoring} onChange={(event) => setLimit(event.target.value)} /></label>
     </div>
-    <p><label><input type="checkbox" checked={acknowledged} disabled={monitoring} onChange={(event) => setAcknowledged(event.target.checked)} /> Tôi hiểu snapshot sẽ lưu vào lịch sử; nếu dùng thời gian giả lập thì dữ liệu lưu không được đánh dấu riêng.</label></p>
+    <p><label><input type="checkbox" checked={acknowledged} disabled={monitoring} onChange={(event) => setAcknowledged(event.target.checked)} /> {production ? "Tôi xác nhận đã nhập thời gian ghi thực tế và dùng đúng camera. Kết quả sẽ lưu vào Lịch sử và báo cáo." : "Tôi hiểu snapshot sẽ lưu vào lịch sử; nếu dùng thời gian giả lập thì dữ liệu lưu không được đánh dấu riêng."}</label></p>
     <div className="polygon-controls">
-      <button type="button" className="manager-primary" disabled={!ready || !cameraId || !acknowledged || monitoring || locked} onClick={start}>Bắt đầu phân tích</button>
+      <button type="button" className="manager-primary" disabled={!ready || !cameraId || !acknowledged || monitoring || locked} onClick={() => start(true)}>Phân tích frame hiện tại</button>
+      <button type="button" className="manager-primary" disabled={!ready || !cameraId || !acknowledged || monitoring || locked} onClick={() => start(false)}>Phân tích theo chu kỳ</button>
       <button type="button" disabled={!monitoring} onClick={() => { stop.current = true; setStatus("Đang dừng; snapshot đã gửi vẫn sẽ được xử lý."); }}>Dừng</button>
     </div>
     {status && <p role="status">{status}</p>}
     {error && <p className="manager-error" role="alert">{error}</p>}
     {!cameras.length && <p><Link to="/">Về Dashboard để đăng nhập</Link>{" · "}<button type="button" disabled={monitoring} onClick={() => setCameraAttempt((value) => value + 1)}>Tải lại camera</button></p>}
-    {locked && <p>Đã khóa chạy lại do trạng thái chưa rõ. Kiểm tra Lịch sử và chờ job hoàn tất trước khi tải lại trang.</p>}
+    {locked && <p>Đã khóa chạy lại vì có snapshot đang xử lý hoặc chưa rõ trạng thái. Hãy kiểm tra Lịch sử và chờ job hoàn tất. <button type="button" onClick={() => {
+      if (window.confirm("Bạn đã kiểm tra Lịch sử và xác nhận snapshot trước đã hoàn tất hoặc thất bại?")) {
+        sessionStorage.removeItem(PENDING_VIDEO_JOB);
+        setLocked(false);
+      }
+    }}>Đã kiểm tra, cho phép chạy lại</button></p>}
+    <p>Video được đọc trên thiết bị của bạn. Đóng trang sẽ dừng gửi frame mới; snapshot đã gửi vẫn tiếp tục xử lý. Chu kỳ được tính sau khi lần trước hoàn tất.</p>
   </section>;
 }

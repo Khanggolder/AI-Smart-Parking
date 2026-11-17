@@ -192,6 +192,10 @@ function App() {
               path="/reports"
               element={<Reports />}
             />
+            <Route
+              path="/video-monitoring"
+              element={<VideoFramePreview production />}
+            />
           </Route>
         </Route>
         
