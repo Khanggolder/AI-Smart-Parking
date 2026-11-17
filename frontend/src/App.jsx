@@ -19,6 +19,7 @@ import MainLayout from "./layouts/MainLayout";
 import Dashboard from "./pages/Dashboard";
 import History from "./pages/History";
 import Reports from "./pages/Reports";
+import VideoFramePreview from "./pages/VideoFramePreview";
 import Login from "./pages/Login";
 
 import {
@@ -209,6 +210,10 @@ function App() {
             <Route
               path="/dev/polygon-editor"
               element={<PolygonEditor role="admin" demo={true} />}
+            />
+            <Route
+              path="/dev/video-frame"
+              element={<VideoFramePreview />}
             />
           </>
         )}
