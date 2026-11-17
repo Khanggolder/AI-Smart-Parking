@@ -1,6 +1,6 @@
 # Hợp đồng API inference W4
 
-Dịch vụ AI xử lý **một snapshot** từ camera cố định, không lưu dữ liệu. [Hợp đồng backend](../../docs/api/backend-api-contract-v1.md) hiện mô tả `/predict` và metadata khác với API `/v1/infer` này; [kế hoạch tích hợp](BACKEND_AI_INTEGRATION_PLAN.md) nêu mapping để Nam review trước khi có adapter.
+Dịch vụ AI xử lý **một snapshot** từ camera cố định, không lưu dữ liệu. Backend hiện gọi `/v1/infer` qua [adapter](../../backend/app/services/ai_client.py), chuyển polygon `{x,y}` thành `[x,y]` và kiểm tra response. [Hợp đồng backend](../../docs/api/backend-api-contract-v1.md) ghi chi tiết API nghiệp vụ.
 
 ## Endpoint
 

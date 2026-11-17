@@ -1,4 +1,4 @@
-"""AI Smart Parking backend REST API (W2 JWT authentication foundation)."""
+"""AI Smart Parking backend REST API."""
 
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
