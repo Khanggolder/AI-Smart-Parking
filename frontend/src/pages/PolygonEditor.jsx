@@ -1173,9 +1173,9 @@ async function saveEditPolygon() {
       </div>
     )}
 
-      {import.meta.env.DEV && isAdmin && imageUrl && (
+      {isAdmin && imageUrl && (
         <div className="polygon-row-preview">
-          <h3>Thử căn đều theo ô mẫu</h3>
+          <h3>Tạo hàng ô đỗ theo ô mẫu</h3>
           <p>Chọn polygon mẫu, chỉnh khoảng cách và kiểm tra ô nét đứt trước khi tạo. Công cụ không tự nhận diện vạch đỗ.</p>
           <div className="polygon-controls">
             <label>Số ô thêm <input type="number" min="1" max="30" step="1" disabled={saving} value={rowCount} onChange={(event) => setRowCount(Math.max(1, Math.min(30, Math.trunc(Number(event.target.value)) || 1)))} /></label>
@@ -1229,7 +1229,7 @@ async function saveEditPolygon() {
             aria-label="Vùng vẽ polygon"
           >
 
-        {import.meta.env.DEV && rowCopies.map((copy, index) => (
+        {isAdmin && rowCopies.map((copy, index) => (
           <polygon key={`preview-${index}`} points={toSvgPoints(copy)} fill="rgba(37,99,235,0.16)" stroke="#2563eb" strokeWidth="3" strokeDasharray="8 5" vectorEffect="non-scaling-stroke" pointerEvents="none" />
         ))}
         {polygons.map((item) => (
