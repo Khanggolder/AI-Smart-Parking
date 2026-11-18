@@ -223,6 +223,16 @@
   max-width: 100%;
 }
 
+.video-analysis-result {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid #cbd5e1;
+}
+
+.video-analysis-result .stats-grid {
+  margin-top: 16px;
+}
+
 .snapshot-filters {
   display: flex;
   flex-wrap: wrap;
