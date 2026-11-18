@@ -194,7 +194,7 @@ function App() {
             />
             <Route
               path="/video-monitoring"
-              element={<VideoFramePreview production />}
+              element={<VideoFramePreview production role={auth.role} />}
             />
           </Route>
         </Route>

@@ -4,6 +4,8 @@
 
 Trang `/video-monitoring` yêu cầu đăng nhập và hiển thị trong giao diện chính; `/dev/video-frame` tiếp tục dùng để thử nghiệm local. Người dùng chọn một file MP4 trên máy, phát hoặc tua video, chụp frame bằng Canvas và tải ảnh JPEG về. Có thể gửi một frame hoặc gửi theo chu kỳ tới API snapshot hiện có; file video không được tải lên Backend.
 
+Admin có thể tua đến frame mong muốn, chọn **Chụp frame**, chọn camera và **Dùng frame để vẽ ô đỗ**. Sau khi xác nhận, FE gửi trực tiếp frame JPEG làm ảnh tham chiếu rồi mở Polygon Editor với đúng camera; không cần lưu ảnh về máy. Camera phải không có ô đỗ đang hoạt động; FE kiểm tra phiên bản cấu hình và Backend kiểm tra lại khi lưu. Chỉ dùng video cùng góc camera cố định vì hệ thống không tự căn chỉnh khi góc quay thay đổi.
+
 Không cần FFmpeg để chạy tính năng trên trình duyệt. Định dạng MP4 là một container; video chỉ phát được nếu codec của nó được trình duyệt hỗ trợ.
 
 ## Video kiểm thử

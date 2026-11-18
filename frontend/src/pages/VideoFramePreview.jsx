@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import VideoAutoAnalysis from "./VideoAutoAnalysis";
+import VideoReferenceImage from "./VideoReferenceImage";
 
-export default function VideoFramePreview({ production = false }) {
+export default function VideoFramePreview({ production = false, role = "operator" }) {
   const videoRef = useRef(null);
   const generation = useRef(0);
   const [videoUrl, setVideoUrl] = useState("");
@@ -11,6 +12,7 @@ export default function VideoFramePreview({ production = false }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [monitoring, setMonitoring] = useState(false);
+  const [referenceBusy, setReferenceBusy] = useState(false);
 
   useEffect(() => () => { if (videoUrl) URL.revokeObjectURL(videoUrl); }, [videoUrl]);
   useEffect(() => () => { if (frame?.url) URL.revokeObjectURL(frame.url); }, [frame]);
@@ -69,7 +71,7 @@ export default function VideoFramePreview({ production = false }) {
           setError("Không thể tạo ảnh JPEG từ frame này.");
           return;
         }
-        setFrame({ url: URL.createObjectURL(blob), seconds, width, height, size: blob.size });
+        setFrame({ url: URL.createObjectURL(blob), blob, seconds, width, height, size: blob.size });
       }, "image/jpeg", 0.92);
     } catch {
       setBusy(false);
@@ -82,7 +84,7 @@ export default function VideoFramePreview({ production = false }) {
       <h1>Phân tích video MP4</h1>
       <p>Chọn video trên máy, phát hoặc tua đến vị trí cần kiểm tra rồi chọn <strong>Chụp frame</strong>. Video được đọc tại trình duyệt.</p>
       <label className="video-frame-file">Video MP4
-        <input type="file" accept=".mp4,video/mp4" onChange={chooseVideo} disabled={monitoring} />
+        <input type="file" accept=".mp4,video/mp4" onChange={chooseVideo} disabled={monitoring || referenceBusy} />
       </label>
       {videoUrl && <video key={videoUrl} ref={videoRef} src={videoUrl} controls playsInline
         onLoadedData={(event) => {
@@ -92,7 +94,7 @@ export default function VideoFramePreview({ production = false }) {
           setError(hasVideo ? "" : "Không tìm thấy hình ảnh video có thể phát. File có thể dùng codec không được trình duyệt hỗ trợ; hãy thử MP4 H.264.");
         }}
         onError={() => { setReady(false); setError("Trình duyệt không thể phát file này. Hãy thử MP4 với codec được trình duyệt hỗ trợ."); }} />}
-      {videoUrl && <button className="manager-primary" type="button" onClick={capture} disabled={!ready || busy || monitoring}>
+      {videoUrl && <button className="manager-primary" type="button" onClick={capture} disabled={!ready || busy || monitoring || referenceBusy}>
         {busy ? "Đang tạo ảnh..." : "Chụp frame"}
       </button>}
       {error && <p className="manager-error" role="alert">{error}</p>}
@@ -102,9 +104,10 @@ export default function VideoFramePreview({ production = false }) {
         <img src={frame.url} alt="Frame vừa trích từ video" />
         <p>Ảnh cần có cùng kích thước và góc camera với ảnh tham chiếu. Vị trí trong video không phải thời gian chụp thực tế.</p>
         <a className="manager-primary video-frame-download" href={frame.url} download="video-frame.jpg">Tải ảnh JPEG</a>
+        {production && role === "admin" && <VideoReferenceImage frame={frame} disabled={monitoring} setReferenceBusy={setReferenceBusy} />}
         <p>Nếu muốn thử AI, tải ảnh này lên Dashboard bằng luồng snapshot hiện có và nhập đúng thời gian chụp. Việc gửi ảnh sẽ tạo snapshot trong lịch sử.</p>
       </section>}
-      <VideoAutoAnalysis videoRef={videoRef} ready={ready} monitoring={monitoring} setMonitoring={setMonitoring} production={production} />
+      <VideoAutoAnalysis videoRef={videoRef} ready={ready && !referenceBusy} monitoring={monitoring} setMonitoring={setMonitoring} production={production} />
       <p><Link to="/">Về Dashboard</Link></p>
     </section>
   </div>;

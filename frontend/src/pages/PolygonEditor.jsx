@@ -88,7 +88,8 @@ export default function PolygonEditor({
   role = "operator",
   demo: demoProp = false,
 }) {
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
+  const requestedCameraId = new URLSearchParams(search).get("cameraId");
 
   const demo =
     demoProp ||
@@ -153,9 +154,13 @@ useEffect(() => {
     .then((data) => {
       if (!active) return;
 
-    const initialCamera =
-      data.find((camera) => camera.reference_image_path) ||
-      data[0];
+    const initialCamera = requestedCameraId
+      ? data.find((camera) => camera.id === requestedCameraId)
+      : data.find((camera) => camera.reference_image_path) || data[0];
+
+    if (requestedCameraId && !initialCamera) {
+      setCameraError("Không tìm thấy camera vừa chọn. Hãy chọn camera trong danh sách.");
+    }
 
     setCameras(data);
     setLoadingReference(
@@ -178,7 +183,7 @@ useEffect(() => {
   return () => {
     active = false;
   };
-}, [demo]);
+}, [demo, requestedCameraId]);
 
 
 useEffect(() => {

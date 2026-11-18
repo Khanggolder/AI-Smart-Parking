@@ -806,7 +806,20 @@
   border-color: #2563eb;
 }
 
+.video-reference-image .polygon-controls .manager-primary {
+  color: #fff;
+  background: #2563eb;
+  border-color: #2563eb;
+}
+
 .video-auto-analysis .polygon-controls button:disabled {
+  color: #475569;
+  background: #e2e8f0;
+  border-color: #cbd5e1;
+  opacity: 1;
+}
+
+.video-reference-image .polygon-controls button:disabled {
   color: #475569;
   background: #e2e8f0;
   border-color: #cbd5e1;
