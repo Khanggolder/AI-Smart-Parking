@@ -173,6 +173,55 @@
   pointer-events: none;
 }
 
+.dashboard-image .snapshot-review-overlay {
+  pointer-events: auto;
+}
+
+.snapshot-review-overlay polygon {
+  cursor: pointer;
+}
+
+.spot-review-dialog {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  box-sizing: border-box;
+  width: min(520px, calc(100vw - 32px));
+  max-height: min(85dvh, 800px);
+  overflow-y: auto;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  padding: 18px;
+  color: #0f172a;
+}
+
+.spot-review-dialog::backdrop {
+  background: rgb(15 23 42 / 55%);
+}
+
+.spot-review-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.spot-review-dialog-header button {
+  width: 32px;
+  height: 32px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: white;
+  color: #0f172a;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.spot-review-dialog .review-panel {
+  margin-top: 8px;
+  border: 0;
+  padding: 0;
+}
+
 .dashboard-dot {
   display: inline-block;
   width: 10px;
@@ -221,6 +270,16 @@
 .video-auto-analysis input[type="number"] {
   width: 140px;
   max-width: 100%;
+}
+
+.video-analysis-result {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid #cbd5e1;
+}
+
+.video-analysis-result .stats-grid {
+  margin-top: 16px;
 }
 
 .snapshot-filters {
@@ -806,7 +865,20 @@
   border-color: #2563eb;
 }
 
+.video-reference-image .polygon-controls .manager-primary {
+  color: #fff;
+  background: #2563eb;
+  border-color: #2563eb;
+}
+
 .video-auto-analysis .polygon-controls button:disabled {
+  color: #475569;
+  background: #e2e8f0;
+  border-color: #cbd5e1;
+  opacity: 1;
+}
+
+.video-reference-image .polygon-controls button:disabled {
   color: #475569;
   background: #e2e8f0;
   border-color: #cbd5e1;
@@ -820,6 +892,37 @@
   overflow: hidden;
   border: 2px solid #cbd5e1;
   border-radius: 10px;
+}
+
+.polygon-quick-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100% - 16px);
+  padding: 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: white;
+  box-shadow: 0 4px 12px rgb(15 23 42 / 20%);
+}
+
+.polygon-quick-actions button {
+  padding: 6px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: white;
+  color: #0f172a;
+  cursor: pointer;
+}
+
+.polygon-quick-actions button:disabled {
+  opacity: .5;
+  cursor: not-allowed;
 }
 
 .polygon-canvas img {

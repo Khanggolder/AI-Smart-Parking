@@ -4,9 +4,52 @@ import { TOKEN_KEY } from "../api/auth";
 import { getSnapshot, submitSnapshot } from "../api/snapshots";
 import { captureTime, validateVideoCamera, waitBeforeNextFrame, waitForVideoSnapshot } from "../utils/videoJobs";
 import { Link } from "react-router-dom";
+import StatCard from "../components/StatCard";
+import SpotLabels from "../components/SpotLabels";
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const PENDING_VIDEO_JOB = "asp_video_pending_job";
+const spotLabels = { empty: "Trống", occupied: "Có xe", unknown: "Chưa xác định" };
+const spotColors = { empty: "#16a34a", occupied: "#dc2626", unknown: "#64748b" };
+
+function VideoAnalysisResult({ result }) {
+  const [imageUrl, setImageUrl] = useState("");
+  const { snapshot, position, cameraName, blob } = result;
+  const predictions = Array.isArray(snapshot.predictions) ? snapshot.predictions : [];
+  useEffect(() => {
+    let active = true;
+    const url = URL.createObjectURL(blob);
+    Promise.resolve().then(() => { if (active) setImageUrl(url); });
+    return () => { active = false; URL.revokeObjectURL(url); };
+  }, [blob]);
+  return <section className="video-analysis-result" aria-label="Kết quả phân tích frame gần nhất">
+    <h3>Kết quả frame gần nhất</h3>
+    <p>Camera: {cameraName} · Vị trí video: {position.toFixed(2)} giây · Thời gian ghi: {new Date(snapshot.captured_at).toLocaleString("vi-VN")}</p>
+    <p>Đây là kết quả của frame đã chụp, không phải trạng thái trực tiếp của video.</p>
+    {snapshot.summary ? <div className="stats-grid">
+      <StatCard title="Tổng số ô" value={snapshot.summary.total} color="#2563eb" />
+      <StatCard title="Ô trống" value={snapshot.summary.empty} color={spotColors.empty} />
+      <StatCard title="Đã có xe" value={snapshot.summary.occupied} color={spotColors.occupied} />
+      <StatCard title="Chưa xác định" value={snapshot.summary.unknown} color={spotColors.unknown} />
+    </div> : <p>Không có thông tin tổng hợp cho snapshot này.</p>}
+    {imageUrl && <div className="dashboard-image">
+      <img src={imageUrl} alt="Frame vừa được phân tích" />
+      <svg viewBox="0 0 1 1" preserveAspectRatio="none" aria-hidden="true">
+        {predictions.filter((spot) => Array.isArray(spot.polygon)).map((spot) => <polygon key={spot.id}
+          points={spot.polygon.map((point) => `${point.x},${point.y}`).join(" ")}
+          fill={spotColors[spot.effective_label] || spotColors.unknown} fillOpacity="0.4"
+          stroke={spotColors[spot.effective_label] || spotColors.unknown} strokeWidth="0.004" />)}
+      </svg>
+      <SpotLabels spots={predictions} />
+    </div>}
+    {predictions.length > 0 && <div className="manager-table-wrap"><table className="manager-table">
+      <thead><tr><th>Mã ô</th><th>Trạng thái</th><th>Confidence</th></tr></thead>
+      <tbody>{predictions.map((spot) => <tr key={spot.id}><td>{spot.spot_code}</td><td><span className="dashboard-dot" style={{ backgroundColor: spotColors[spot.effective_label] || spotColors.unknown }} />{spotLabels[spot.effective_label] || "Chưa xác định"}</td><td>{typeof spot.confidence === "number" ? `${(spot.confidence * 100).toFixed(1)}%` : "Không có"}</td></tr>)}</tbody>
+    </table></div>}
+    <p>Confidence là điểm tin cậy của mô hình, chưa được hiệu chuẩn.</p>
+    <p><Link to="/history">Xem Lịch sử</Link></p>
+  </section>;
+}
 
 function frameBlob(video) {
   return new Promise((resolve, reject) => {
@@ -37,6 +80,7 @@ export default function VideoAutoAnalysis({ videoRef, ready, monitoring, setMoni
   const [error, setError] = useState("");
   const [locked, setLocked] = useState(() => Boolean(sessionStorage.getItem(PENDING_VIDEO_JOB)));
   const [cameraAttempt, setCameraAttempt] = useState(0);
+  const [result, setResult] = useState(null);
   const stop = useRef(false);
   const active = useRef(false);
   const mounted = useRef(false);
@@ -103,7 +147,10 @@ export default function VideoAutoAnalysis({ videoRef, ready, monitoring, setMoni
         sessionStorage.removeItem(PENDING_VIDEO_JOB);
         completed += 1;
         lastPosition = position;
-        if (mounted.current) setStatus(`Đã phân tích ${completed}/${maxFrames} frame. Xem kết quả trong Lịch sử hoặc Dashboard.`);
+        if (mounted.current) {
+          setResult({ snapshot: job, position, cameraName: camera.name, blob });
+          setStatus(`Đã phân tích ${completed}/${maxFrames} frame.`);
+        }
         if (!stop.current && completed < maxFrames) {
           await waitBeforeNextFrame({ intervalMs: secondsBetween * 1000, shouldStop: () => stop.current, wait: sleep });
         }
@@ -114,6 +161,7 @@ export default function VideoAutoAnalysis({ videoRef, ready, monitoring, setMoni
       if (!resultUncertain) sessionStorage.removeItem(PENDING_VIDEO_JOB);
       if (mounted.current) {
         setError(`${err.message}${resultUncertain ? " Hãy kiểm tra Lịch sử trước khi chạy lại; snapshot có thể đã được tạo." : ""}`);
+        setStatus("Đã dừng phân tích. Kết quả thành công gần nhất vẫn được hiển thị nếu có.");
         if (resultUncertain) setLocked(true);
       }
     } finally {
@@ -126,7 +174,7 @@ export default function VideoAutoAnalysis({ videoRef, ready, monitoring, setMoni
     <h2>Phân tích frame video</h2>
     <p>Frame sẽ được gửi đến Backend và tạo snapshot thật trong Lịch sử. Chọn camera có ảnh tham chiếu cùng góc nhìn và kích thước video.</p>
     <div className="polygon-controls">
-      <label>Camera<select className="manager-select" value={cameraId} disabled={monitoring} onChange={(event) => setCameraId(event.target.value)}><option value="">-- Chọn camera --</option>{cameras.map((camera) => <option key={camera.id} value={camera.id}>{camera.name}</option>)}</select></label>
+      <label>Camera<select className="manager-select" value={cameraId} disabled={monitoring} onChange={(event) => { setCameraId(event.target.value); setResult(null); }}><option value="">-- Chọn camera --</option>{cameras.map((camera) => <option key={camera.id} value={camera.id}>{camera.name}</option>)}</select></label>
       <label>Thời gian bắt đầu ghi video (vị trí 0 giây)<input type="datetime-local" step="1" value={startAt} disabled={monitoring} onChange={(event) => setStartAt(event.target.value)} /></label>
       <label>Chu kỳ sau mỗi lần hoàn tất (giây)<input type="number" min="5" max="300" step="1" value={interval} disabled={monitoring} onChange={(event) => setIntervalSeconds(event.target.value)} /></label>
       <label>Số frame tối đa<input type="number" min="1" max="10" step="1" value={limit} disabled={monitoring} onChange={(event) => setLimit(event.target.value)} /></label>
@@ -147,5 +195,6 @@ export default function VideoAutoAnalysis({ videoRef, ready, monitoring, setMoni
       }
     }}>Đã kiểm tra, cho phép chạy lại</button></p>}
     <p>Video được đọc trên thiết bị của bạn. Đóng trang sẽ dừng gửi frame mới; snapshot đã gửi vẫn tiếp tục xử lý. Chu kỳ được tính sau khi lần trước hoàn tất.</p>
+    {result && <VideoAnalysisResult key={result.snapshot.id} result={result} />}
   </section>;
 }
