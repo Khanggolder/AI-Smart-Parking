@@ -107,7 +107,7 @@ export default function VideoFramePreview({ production = false, role = "operator
         {production && role === "admin" && <VideoReferenceImage frame={frame} disabled={monitoring} setReferenceBusy={setReferenceBusy} />}
         <p>Nếu muốn thử AI, tải ảnh này lên Dashboard bằng luồng snapshot hiện có và nhập đúng thời gian chụp. Việc gửi ảnh sẽ tạo snapshot trong lịch sử.</p>
       </section>}
-      <VideoAutoAnalysis key={videoUrl} videoRef={videoRef} ready={ready && !referenceBusy} monitoring={monitoring} setMonitoring={setMonitoring} production={production} />
+      <VideoAutoAnalysis key={`analysis:${videoUrl}`} videoRef={videoRef} ready={ready && !referenceBusy} monitoring={monitoring} setMonitoring={setMonitoring} production={production} />
       <p><Link to="/">Về Dashboard</Link></p>
     </section>
   </div>;
