@@ -107,6 +107,7 @@ export default function PolygonEditor({
   const [storageKey, setStorageKey] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [selectedPolygonId, setSelectedPolygonId] = useState(null);
+  const [showPolygonActions, setShowPolygonActions] = useState(false);
   const [editingPoints, setEditingPoints] = useState([]);
   const draggingIndex = useRef(null);
   const [cameraVersion, setCameraVersion] = useState(null);
@@ -989,6 +990,7 @@ async function saveEditPolygon() {
               setDraft([]);
               setEditingId(null);
               setSelectedPolygonId(null);
+              setShowPolygonActions(false);
               setEditingPoints([]);
               setImageUrl("");
               setMessage("");
@@ -1261,6 +1263,7 @@ async function saveEditPolygon() {
               if (saving || draft.length || editingId !== null) return;
               event.stopPropagation();
               setSelectedPolygonId(item.id);
+              setShowPolygonActions(true);
             }}
           />
         ))}
@@ -1323,11 +1326,24 @@ async function saveEditPolygon() {
             const y = Math.min(96, Math.max(4, points.reduce((sum, p) => sum + p.y, 0) / points.length * 100));
             return <span key={item.id} className={`polygon-label${item.id === selectedPolygonId ? " polygon-label-selected" : ""}`} style={{ left: `${x}%`, top: `${y}%` }}>{item.spot_code}</span>;
           })}
+          {isAdmin && showPolygonActions && rowSource && editingId === null && draft.length === 0 && <div className="polygon-quick-actions" role="group" aria-label={`Thao tác ô ${rowSource.spot_code}`}>
+            <strong>Ô {rowSource.spot_code}</strong>
+            <button type="button" aria-label="Đóng thao tác" onClick={() => setShowPolygonActions(false)}>×</button>
+            <button type="button" disabled={saving || polygons.some((polygon) => polygon.pending)} onClick={() => { setShowPolygonActions(false); startEditPolygon(rowSource); }}>Sửa</button>
+            <button type="button" disabled={saving || (!demo && (cameraVersion === null || rowSource.pending))} onClick={() => deletePolygon(rowSource.id)}>{demo ? "Xóa" : "Ngừng kích hoạt"}</button>
+          </div>}
         </div>
       ) : (
         <div className="manager-state">
           <h3>Chưa có ảnh tham chiếu</h3>
           <p>{demo ? "Admin hãy chọn ảnh để bắt đầu vẽ ô đỗ." : "Vui lòng upload ảnh tham chiếu lên Backend trước khi vẽ."}</p>
+        </div>
+      )}
+
+      {editingId !== null && (
+        <div className="polygon-edit-actions">
+          <button type="button" onClick={saveEditPolygon} disabled={saving}>{saving ? "Đang cập nhật..." : demo ? "Lưu chỉnh sửa" : "Lưu chỉnh sửa lên PostgreSQL"}</button>
+          <button type="button" onClick={cancelEditPolygon} disabled={saving}>Hủy chỉnh sửa</button>
         </div>
       )}
 
@@ -1349,31 +1365,6 @@ async function saveEditPolygon() {
       <h3>Danh sách polygon ({polygons.length})</h3>
 
 
-
-
-      {editingId !== null && (
-        <div className="polygon-edit-actions">
-          <button
-            type="button"
-            onClick={saveEditPolygon}
-            disabled={saving}
-          >
-            {saving
-              ? "Đang cập nhật..."
-              : demo
-                ? "Lưu chỉnh sửa"
-                : "Lưu chỉnh sửa lên PostgreSQL"}
-          </button>
-
-          <button
-            type="button"
-            onClick={cancelEditPolygon}
-            disabled={saving}
-          >
-            Hủy chỉnh sửa
-          </button>
-        </div>
-      )}
 
 
       {polygons.map((item) => (

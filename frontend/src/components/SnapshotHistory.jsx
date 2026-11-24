@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { fetchCameras } from "../api/parking";
 import { getSnapshot, getSnapshotImage, listSnapshots } from "../api/snapshots";
 import SpotLabels from "./SpotLabels";
@@ -10,6 +10,19 @@ const PAGE_SIZE = 20;
 const jobNames = { queued: "Đang chờ", processing: "Đang xử lý", completed: "Hoàn thành", failed: "Thất bại" };
 const labels = { empty: "Trống", occupied: "Có xe", unknown: "Chưa xác định" };
 const colors = { empty: "#16a34a", occupied: "#dc2626", unknown: "#64748b" };
+
+function ReviewDialog({ spot, onClose, onRefresh }) {
+  const dialogRef = useRef(null);
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    dialog.showModal();
+    return () => { if (dialog.open) dialog.close(); };
+  }, []);
+  return <dialog ref={dialogRef} className="spot-review-dialog" aria-label={`Xác minh ô ${spot.spot_code}`} onCancel={(event) => { event.preventDefault(); onClose(); }}>
+    <div className="spot-review-dialog-header"><button type="button" onClick={onClose} aria-label="Đóng xác minh">×</button></div>
+    <PredictionReview key={spot.id} spot={spot} onRefresh={onRefresh} />
+  </dialog>;
+}
 const emptyFilters = { camera: "", status: "", occupancy: "", from: "", to: "" };
 
 function message(error) {
@@ -99,8 +112,8 @@ function SnapshotDetail({ id, cameraNames, report }) {
     {image.error && <p role="alert">{image.error}</p>}
     {image.url && <div className="dashboard-image">
       <img src={image.url} alt="Ảnh snapshot được chọn" />
-      <svg viewBox="0 0 1 1" preserveAspectRatio="none" aria-hidden="true">
-        {snapshot.predictions.map((spot) => <polygon key={spot.id} points={spot.polygon.map((p) => `${p.x},${p.y}`).join(" ")} fill={colors[spot.effective_label] || colors.unknown} fillOpacity="0.4" stroke={colors[spot.effective_label] || colors.unknown} strokeWidth="0.004" />)}
+      <svg className={report ? undefined : "snapshot-review-overlay"} viewBox="0 0 1 1" preserveAspectRatio="none" aria-hidden="true">
+        {snapshot.predictions.map((spot) => <polygon key={spot.id} points={spot.polygon.map((p) => `${p.x},${p.y}`).join(" ")} fill={colors[spot.effective_label] || colors.unknown} fillOpacity="0.4" stroke={colors[spot.effective_label] || colors.unknown} strokeWidth="0.004" onClick={report ? undefined : () => setReviewId(spot.id)} />)}
       </svg>
       <SpotLabels spots={snapshot.predictions} />
     </div>}
@@ -110,7 +123,7 @@ function SnapshotDetail({ id, cameraNames, report }) {
         <thead><tr><th>Mã ô</th><th>Dự đoán AI</th><th>Nhãn hiện tại</th><th>Confidence</th>{!report && <th>Xác minh</th>}</tr></thead>
         <tbody>{snapshot.predictions.map((spot) => <tr key={spot.id}><td>{spot.spot_code}</td><td>{labels[spot.predicted_label] || spot.predicted_label}</td><td>{labels[spot.effective_label] || spot.effective_label}</td><td>{typeof spot.confidence === "number" ? `${(spot.confidence * 100).toFixed(1)}%` : "—"}</td>{!report && <td><button type="button" aria-pressed={reviewId === spot.id} onClick={() => setReviewId(spot.id)}>Xác minh</button></td>}</tr>)}</tbody>
       </table></div>
-      {!report && reviewId && <PredictionReview key={reviewId} spot={snapshot.predictions.find((spot) => spot.id === reviewId)} onRefresh={async () => {
+      {!report && reviewId && <ReviewDialog key={reviewId} spot={snapshot.predictions.find((spot) => spot.id === reviewId)} onClose={() => setReviewId("")} onRefresh={async () => {
         const data = await getSnapshot(id);
         setState({ status: "ready", data, error: "" });
       }} />}
